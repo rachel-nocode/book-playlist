@@ -1,17 +1,31 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
+import { Id } from "../convex/_generated/dataModel";
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
 import { api } from "../convex/_generated/api";
 import { useSpotifySession } from "./lib/use-spotify-session";
 
 export function SavedPlaylists() {
   const { session } = useSpotifySession();
+  const removeBook = useMutation(api.books.remove);
+  const [removingId, setRemovingId] = useState<Id<"books"> | null>(null);
   const rows = useQuery(
     api.books.listWithPlaylists,
     session?.sessionId ? { sessionId: session.sessionId } : "skip"
   );
+
+  async function handleRemove(bookId: Id<"books">) {
+    if (!session?.sessionId || removingId) return;
+    setRemovingId(bookId);
+    try {
+      await removeBook({ sessionId: session.sessionId, bookId });
+    } finally {
+      setRemovingId(null);
+    }
+  }
 
   if (!session?.connected) {
     return null;
@@ -47,10 +61,10 @@ export function SavedPlaylists() {
       </div>
       <ul className="grid gap-2 sm:grid-cols-2">
         {rows.map(({ book, playlist }) => (
-          <li key={book._id}>
+          <li key={book._id} className="group relative">
             <Link
               href={`/books/${book._id}`}
-              className="focus-ring group flex min-h-28 items-center gap-3 rounded-lg bg-[#242424] p-3 transition-colors hover:bg-[#303030] active:bg-[#383838]"
+              className="focus-ring flex min-h-28 items-center gap-3 rounded-lg bg-[#242424] p-3 pr-10 transition-colors hover:bg-[#303030] active:bg-[#383838]"
             >
               <BookArt title={book.title} url={book.coverUrl ?? null} />
               <span className="min-w-0 flex-1">
@@ -71,6 +85,21 @@ export function SavedPlaylists() {
                 ›
               </span>
             </Link>
+            <button
+              type="button"
+              onClick={() => void handleRemove(book._id)}
+              disabled={removingId === book._id}
+              aria-label={`Remove ${book.title} from your library`}
+              className="focus-ring absolute right-2 top-2 flex size-7 items-center justify-center rounded-full bg-black/60 text-white/70 opacity-0 backdrop-blur-sm transition-all hover:bg-red-600 hover:text-white group-hover:opacity-100 disabled:opacity-50"
+            >
+              {removingId === book._id ? (
+                <span className="size-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="size-4" aria-hidden>
+                  <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+                </svg>
+              )}
+            </button>
           </li>
         ))}
       </ul>
