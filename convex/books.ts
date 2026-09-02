@@ -1,4 +1,5 @@
 import {
+  internalMutation,
   internalQuery,
   mutation,
   query,
@@ -9,7 +10,8 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { Id, Doc } from "./_generated/dataModel";
 import { getAddedBy } from "./lib/auth";
-import { spotifyTrack } from "./lib/validators";
+import { sanitizeVibeIds } from "./lib/vibes";
+import { spotifyTrack, vibeId } from "./lib/validators";
 
 const bookDoc = v.object({
   _id: v.id("books"),
@@ -34,6 +36,7 @@ const playlistDoc = v.object({
   tracks: v.optional(v.array(spotifyTrack)),
   generatedAt: v.number(),
   refreshedAt: v.number(),
+  sourceHint: v.optional(v.string()),
 });
 
 export const create = mutation({
@@ -180,6 +183,61 @@ export const getDetail = query({
       isOwner,
       lastManualRefreshAt,
     };
+  },
+});
+
+export const setMoodTags = mutation({
+  args: {
+    sessionId: v.id("sessions"),
+    bookId: v.id("books"),
+    moodTags: v.array(vibeId),
+  },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
+    const session = await ctx.db.get(args.sessionId);
+    if (!session) {
+      throw new Error("Not connected to Spotify");
+    }
+
+    const book = await ctx.db.get(args.bookId);
+    if (!book) {
+      throw new Error("Book not found");
+    }
+    if (book.userId !== session.userId) {
+      throw new Error("Unauthorized");
+    }
+
+    const moodTags = sanitizeVibeIds(args.moodTags);
+    await ctx.db.patch(args.bookId, { moodTags });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.spotifyActions.refreshBookPlaylist,
+      { bookId: args.bookId }
+    );
+    return null;
+  },
+});
+
+export const persistMoodTags = internalMutation({
+  args: {
+    bookId: v.id("books"),
+    moodTags: v.array(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
+    const book = await ctx.db.get(args.bookId);
+    if (!book) {
+      return null;
+    }
+    if (book.moodTags.length > 0) {
+      return null;
+    }
+    const moodTags = sanitizeVibeIds(args.moodTags);
+    if (moodTags.length === 0) {
+      return null;
+    }
+    await ctx.db.patch(args.bookId, { moodTags });
+    return null;
   },
 });
 

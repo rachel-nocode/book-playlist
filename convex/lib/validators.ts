@@ -1,5 +1,16 @@
 import { v } from "convex/values";
 
+export const vibeId = v.union(
+  v.literal("dark"),
+  v.literal("light"),
+  v.literal("upbeat"),
+  v.literal("sad"),
+  v.literal("sexy"),
+  v.literal("intimate"),
+  v.literal("tense"),
+  v.literal("playful")
+);
+
 export const featureRange = v.object({
   min: v.number(),
   max: v.number(),

@@ -10,6 +10,7 @@ export const overwriteTracks = internalMutation({
   args: {
     bookId: v.id("books"),
     tracks: v.array(spotifyTrack),
+    sourceHint: v.optional(v.string()),
   },
   returns: v.id("playlists"),
   handler: async (ctx, args) => {
@@ -26,6 +27,7 @@ export const overwriteTracks = internalMutation({
         trackIds,
         tracks: args.tracks,
         refreshedAt,
+        sourceHint: args.sourceHint,
       });
       return existing._id;
     }
@@ -37,6 +39,7 @@ export const overwriteTracks = internalMutation({
       tracks: args.tracks,
       generatedAt: refreshedAt,
       refreshedAt,
+      sourceHint: args.sourceHint,
     });
   },
 });

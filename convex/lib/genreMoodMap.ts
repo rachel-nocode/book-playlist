@@ -61,7 +61,7 @@ export const GENRE_MOOD_MAP: Record<string, GenreMoodProfile> = {
     tempo: "high",
     mode: "minor",
     moodTags: ["tense", "urgent"],
-    searchTerms: ["cinematic thriller", "dark electronic"],
+    searchTerms: ["dark electronic", "noir"],
   },
   horror: {
     valence: "low",
@@ -69,7 +69,7 @@ export const GENRE_MOOD_MAP: Record<string, GenreMoodProfile> = {
     tempo: "mid",
     mode: "minor",
     moodTags: ["ominous", "fearful"],
-    searchTerms: ["horror soundtrack", "dissonant"],
+    searchTerms: ["dark ambient", "industrial"],
   },
   mystery: {
     valence: "low",
@@ -99,7 +99,7 @@ export const GENRE_MOOD_MAP: Record<string, GenreMoodProfile> = {
     energy: "mid",
     tempo: "mid",
     moodTags: ["wondrous", "epic"],
-    searchTerms: ["epic fantasy", "orchestral adventure"],
+    searchTerms: ["folk", "celtic"],
   },
   "science fiction": {
     valence: "mid",
@@ -122,7 +122,7 @@ export const GENRE_MOOD_MAP: Record<string, GenreMoodProfile> = {
     tempo: "high",
     mode: "major",
     moodTags: ["bold", "adventurous"],
-    searchTerms: ["adventure soundtrack", "upbeat folk"],
+    searchTerms: ["upbeat folk", "adventure rock"],
   },
   historical: {
     valence: "mid",
@@ -184,6 +184,41 @@ export const GENRE_MOOD_MAP: Record<string, GenreMoodProfile> = {
     moodTags: ["intimate", "reflective"],
     searchTerms: ["singer songwriter", "acoustic"],
   },
+  "dark comedy": {
+    valence: "mid",
+    energy: "mid",
+    tempo: "mid",
+    moodTags: ["dark", "playful"],
+    searchTerms: ["dark pop", "quirky indie"],
+  },
+  "literary fiction": {
+    valence: "mid",
+    energy: "low",
+    tempo: "low",
+    moodTags: ["intimate", "reflective"],
+    searchTerms: ["indie folk", "singer songwriter"],
+  },
+  literary: {
+    valence: "mid",
+    energy: "low",
+    tempo: "low",
+    moodTags: ["intimate", "reflective"],
+    searchTerms: ["indie folk", "literary"],
+  },
+  contemporary: {
+    valence: "mid",
+    energy: "mid",
+    tempo: "mid",
+    moodTags: ["intimate", "playful"],
+    searchTerms: ["indie pop", "indie folk"],
+  },
+  fiction: {
+    valence: "mid",
+    energy: "mid",
+    tempo: "mid",
+    moodTags: ["intimate"],
+    searchTerms: ["indie"],
+  },
 };
 
 const BAND_SCORE: Record<Band, number> = { low: 0, mid: 1, high: 2 };
@@ -192,13 +227,10 @@ export function mapGenreTagsToMoodFilters(genreTags: string[]): MoodFilters {
   const matches: Array<{ key: string; profile: GenreMoodProfile }> = [];
 
   for (const tag of genreTags) {
-    const match = matchGenre(tag);
-    if (match) {
-      matches.push(match);
-    }
+    matches.push(...matchGenres(tag));
   }
 
-  const uniqueMatches = dedupeByKey(matches);
+  const uniqueMatches = dropGenericFiction(dedupeByKey(matches));
   const profiles = uniqueMatches.map((match) => match.profile);
 
   return {
@@ -223,23 +255,30 @@ export function mapGenreTagsToMoodFilters(genreTags: string[]): MoodFilters {
   };
 }
 
-function matchGenre(tag: string): { key: string; profile: GenreMoodProfile } | null {
+function matchGenres(
+  tag: string
+): Array<{ key: string; profile: GenreMoodProfile }> {
   const normalized = normalize(tag);
   if (!normalized) {
-    return null;
+    return [];
   }
 
-  let best: { key: string; profile: GenreMoodProfile } | null = null;
-
+  const matches: Array<{ key: string; profile: GenreMoodProfile }> = [];
   for (const [key, profile] of Object.entries(GENRE_MOOD_MAP)) {
     if (normalized === key || normalized.includes(key)) {
-      if (!best || key.length > best.key.length) {
-        best = { key, profile };
-      }
+      matches.push({ key, profile });
     }
   }
+  return matches;
+}
 
-  return best;
+function dropGenericFiction(
+  matches: Array<{ key: string; profile: GenreMoodProfile }>
+): Array<{ key: string; profile: GenreMoodProfile }> {
+  if (matches.some((match) => match.key !== "fiction")) {
+    return matches.filter((match) => match.key !== "fiction");
+  }
+  return matches;
 }
 
 function mergeBand(

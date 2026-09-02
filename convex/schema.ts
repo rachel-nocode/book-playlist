@@ -59,5 +59,6 @@ export default defineSchema({
     ),
     generatedAt: v.number(),
     refreshedAt: v.number(),
+    sourceHint: v.optional(v.string()),
   }).index("by_bookId", ["bookId"]),
 });
