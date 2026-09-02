@@ -12,13 +12,18 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Spotify only whitelists the 127.0.0.1 loopback callback. Keep the whole
-  // OAuth flow on that host so the state cookie set here is present on callback.
-  // Compare hostname (not host): NextURL.host often omits the port, so
-  // "127.0.0.1" !== "127.0.0.1:3000" would 307 to the same URL forever.
+  // Local dev: Spotify loopback callbacks must stay on 127.0.0.1 so the OAuth
+  // state cookie matches on callback. Never redirect production traffic to loopback.
   const redirectUrl = new URL(redirectUri);
   const requestHostname = (request.headers.get("host") ?? "").split(":")[0];
-  if (requestHostname !== redirectUrl.hostname) {
+  const isLoopbackRedirect =
+    redirectUrl.hostname === "127.0.0.1" || redirectUrl.hostname === "localhost";
+
+  if (
+    process.env.NODE_ENV !== "production" &&
+    isLoopbackRedirect &&
+    requestHostname !== redirectUrl.hostname
+  ) {
     const target = new URL(request.url);
     target.hostname = redirectUrl.hostname;
     target.protocol = redirectUrl.protocol;
