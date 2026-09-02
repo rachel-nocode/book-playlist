@@ -6,6 +6,20 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
 import { mapGenreTagsToMoodFilters } from "./lib/genreMoodMap";
+import type { MoodFilters } from "./lib/genreMoodMap";
+import {
+  buildCatalogQueries,
+  isTrailerText,
+  scorePlaylistMatch,
+  trackVibeScore,
+} from "./lib/trackMatch";
+import {
+  resolveVibeIds,
+  resolveVibeOptions,
+  vibeLabels,
+  type VibeId,
+  type VibeOption,
+} from "./lib/vibes";
 import { moodFilters, spotifyTrack } from "./lib/validators";
 
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
@@ -61,23 +75,38 @@ export const searchTracks = action({
   args: {
     sessionId: v.id("sessions"),
     genreTags: v.array(v.string()),
+    title: v.optional(v.string()),
+    author: v.optional(v.string()),
+    moodTags: v.optional(v.array(v.string())),
     limit: v.optional(v.number()),
   },
   returns: v.object({
     filters: moodFilters,
     tracks: v.array(spotifyTrack),
+    sourceHint: v.string(),
   }),
   handler: async (ctx, args): Promise<{
-    filters: ReturnType<typeof mapGenreTagsToMoodFilters>;
-    tracks: Awaited<ReturnType<typeof searchCatalog>>;
+    filters: MoodFilters;
+    tracks: CompiledTrack[];
+    sourceHint: string;
   }> => {
     const accessToken = await getValidAccessToken(ctx, args.sessionId);
-    const filters = mapGenreTagsToMoodFilters(args.genreTags);
-    const limit = Math.min(Math.max(args.limit ?? 10, 1), 10);
-    const query = buildSearchQuery(filters);
-    const tracks = await searchCatalog(accessToken, query, limit);
+    const compiled = await compileBookTracks(
+      accessToken,
+      {
+        title: args.title ?? "",
+        author: args.author ?? "",
+        genreTags: args.genreTags,
+        moodTags: args.moodTags ?? [],
+      },
+      args.limit
+    );
 
-    return { filters, tracks };
+    return {
+      filters: compiled.filters,
+      tracks: compiled.tracks,
+      sourceHint: compiled.sourceHint,
+    };
   },
 });
 
@@ -123,7 +152,10 @@ async function refreshBook(
   book: {
     _id: Id<"books">;
     userId?: Id<"users">;
+    title: string;
+    author: string;
     genreTags: string[];
+    moodTags: string[];
   }
 ): Promise<void> {
   if (!book.userId) {
@@ -131,16 +163,19 @@ async function refreshBook(
   }
 
   const accessToken = await getValidAccessTokenForUser(ctx, book.userId);
-  const filters = mapGenreTagsToMoodFilters(book.genreTags);
-  const tracks = await searchCatalog(
-    accessToken,
-    buildSearchQuery(filters),
-    10
-  );
+  const compiled = await compileBookTracks(accessToken, book);
+
+  if (book.moodTags.length === 0 && compiled.moodTags.length > 0) {
+    await ctx.runMutation(internal.books.persistMoodTags, {
+      bookId: book._id,
+      moodTags: compiled.moodTags,
+    });
+  }
 
   await ctx.runMutation(internal.playlists.overwriteTracks, {
     bookId: book._id,
-    tracks,
+    tracks: compiled.tracks,
+    sourceHint: compiled.sourceHint,
   });
 }
 
@@ -296,14 +331,310 @@ async function spotifyMe(accessToken: string) {
   };
 }
 
-function buildSearchQuery(filters: ReturnType<typeof mapGenreTagsToMoodFilters>) {
-  const terms = filters.searchTerms.length
-    ? filters.searchTerms
-    : filters.moodTags;
-  if (terms.length === 0) {
-    return "cinematic instrumental";
+type CompiledTrack = {
+  id: string;
+  name: string;
+  artists: string;
+  album: string;
+  albumImageUrl: string | null;
+  previewUrl: string | null;
+  uri: string;
+  externalUrl: string;
+};
+
+const TARGET_TRACKS = 10;
+const MAX_PLAYLISTS = 3;
+const TRACKS_PER_PLAYLIST = 30;
+
+async function compileBookTracks(
+  accessToken: string,
+  book: {
+    title: string;
+    author: string;
+    genreTags: string[];
+    moodTags: string[];
+  },
+  limit?: number
+): Promise<{
+  filters: MoodFilters;
+  tracks: CompiledTrack[];
+  sourceHint: string;
+  moodTags: VibeId[];
+}> {
+  const filters = mapGenreTagsToMoodFilters(book.genreTags);
+  const vibeIds = resolveVibeIds(book.moodTags, filters.moodTags);
+  const vibes = resolveVibeOptions(vibeIds);
+  const target = Math.min(Math.max(limit ?? TARGET_TRACKS, 1), TARGET_TRACKS);
+
+  const harvested = await harvestBookPlaylists(
+    accessToken,
+    book.title,
+    book.author
+  );
+  const catalog = await searchCatalogFill(accessToken, book, vibes, filters);
+
+  const tracks = mergeRankedTracks(
+    [
+      { tracks: harvested, bonus: 8 },
+      { tracks: catalog, bonus: 1 },
+    ],
+    vibes
+  ).slice(0, target);
+
+  return {
+    filters,
+    tracks,
+    sourceHint: sourceHintFor(book.title, vibeIds, harvested.length > 0),
+    moodTags: vibeIds,
+  };
+}
+
+function sourceHintFor(
+  title: string,
+  vibeIds: VibeId[],
+  fromPlaylists: boolean
+): string {
+  if (fromPlaylists && title.trim()) {
+    return `From playlists named ${title.trim()}`;
   }
-  return terms.slice(0, 3).join(" OR ");
+  const labels = vibeLabels(vibeIds);
+  if (labels.length > 0) {
+    return `From ${labels.join(" + ")} search`;
+  }
+  if (title.trim()) {
+    return `From “${title.trim()}” search`;
+  }
+  return "From vibe search";
+}
+
+async function harvestBookPlaylists(
+  accessToken: string,
+  title: string,
+  author: string
+): Promise<CompiledTrack[]> {
+  const trimmedTitle = title.trim();
+  if (!trimmedTitle) {
+    return [];
+  }
+
+  const queries = [`"${trimmedTitle}"`];
+  if (author.trim()) {
+    queries.push(`${trimmedTitle} ${author.trim()}`);
+  }
+
+  const playlists: Array<{
+    id: string;
+    name: string;
+    description: string;
+    score: number;
+  }> = [];
+
+  for (const query of queries) {
+    const found = await searchPlaylists(accessToken, query, 10);
+    for (const playlist of found) {
+      const score = scorePlaylistMatch(
+        playlist.name,
+        playlist.description,
+        trimmedTitle,
+        author
+      );
+      if (score > 0) {
+        playlists.push({ ...playlist, score });
+      }
+    }
+  }
+
+  const top = dedupePlaylists(playlists)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, MAX_PLAYLISTS);
+
+  const tracks: CompiledTrack[] = [];
+  for (const playlist of top) {
+    const items = await getPlaylistTracks(
+      accessToken,
+      playlist.id,
+      TRACKS_PER_PLAYLIST
+    );
+    tracks.push(...items);
+  }
+  return tracks;
+}
+
+async function searchCatalogFill(
+  accessToken: string,
+  book: { title: string; author: string },
+  vibes: VibeOption[],
+  filters: MoodFilters
+): Promise<CompiledTrack[]> {
+  const queries = buildCatalogQueries({
+    title: book.title,
+    author: book.author,
+    vibeSearchTerms: vibes.flatMap((vibe) => [...vibe.searchTerms]),
+    genreSearchTerms: filters.searchTerms,
+  });
+
+  const tracks: CompiledTrack[] = [];
+  for (const query of queries) {
+    tracks.push(...(await searchCatalog(accessToken, query, TARGET_TRACKS)));
+  }
+  return tracks;
+}
+
+function mergeRankedTracks(
+  groups: Array<{ tracks: CompiledTrack[]; bonus: number }>,
+  vibes: VibeOption[]
+): CompiledTrack[] {
+  const byId = new Map<string, CompiledTrack & { score: number }>();
+
+  for (const group of groups) {
+    for (const track of group.tracks) {
+      if (isTrailerTrack(track)) {
+        continue;
+      }
+      const add =
+        group.bonus +
+        trackVibeScore(
+          `${track.name} ${track.artists} ${track.album}`,
+          vibes
+        );
+      const existing = byId.get(track.id);
+      if (existing) {
+        existing.score += add;
+      } else {
+        byId.set(track.id, { ...track, score: add });
+      }
+    }
+  }
+
+  return [...byId.values()]
+    .sort((left, right) => right.score - left.score)
+    .map((ranked) => ({
+      id: ranked.id,
+      name: ranked.name,
+      artists: ranked.artists,
+      album: ranked.album,
+      albumImageUrl: ranked.albumImageUrl,
+      previewUrl: ranked.previewUrl,
+      uri: ranked.uri,
+      externalUrl: ranked.externalUrl,
+    }));
+}
+
+function isTrailerTrack(track: CompiledTrack): boolean {
+  return isTrailerText(`${track.name} ${track.artists} ${track.album}`);
+}
+
+function dedupePlaylists<T extends { id: string }>(playlists: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const playlist of playlists) {
+    if (seen.has(playlist.id)) {
+      continue;
+    }
+    seen.add(playlist.id);
+    result.push(playlist);
+  }
+  return result;
+}
+
+async function searchPlaylists(
+  accessToken: string,
+  query: string,
+  limit: number
+) {
+  const url = new URL(`${API_URL}/search`);
+  url.searchParams.set("q", query);
+  url.searchParams.set("type", "playlist");
+  url.searchParams.set("limit", String(limit));
+
+  const response = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data: unknown = await response.json();
+  if (!response.ok) {
+    throw new Error(spotifyError(data, "Spotify playlist search failed"));
+  }
+  return parsePlaylists(data);
+}
+
+async function getPlaylistTracks(
+  accessToken: string,
+  playlistId: string,
+  limit: number
+) {
+  const url = new URL(`${API_URL}/playlists/${playlistId}/tracks`);
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set(
+    "fields",
+    "items(track(id,name,artists(name),album(name,images),preview_url,uri,external_urls))"
+  );
+
+  const response = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data: unknown = await response.json();
+  if (!response.ok) {
+    throw new Error(spotifyError(data, "Failed to load playlist tracks"));
+  }
+  return parsePlaylistTracks(data);
+}
+
+function parsePlaylists(data: unknown) {
+  if (typeof data !== "object" || data === null || !("playlists" in data)) {
+    return [];
+  }
+  const playlists = (data as { playlists: unknown }).playlists;
+  if (
+    typeof playlists !== "object" ||
+    playlists === null ||
+    !("items" in playlists)
+  ) {
+    return [];
+  }
+  const items = (playlists as { items: unknown }).items;
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  const results: Array<{ id: string; name: string; description: string }> = [];
+  for (const item of items) {
+    if (typeof item !== "object" || item === null) {
+      continue;
+    }
+    const record = item as Record<string, unknown>;
+    if (typeof record.id !== "string" || typeof record.name !== "string") {
+      continue;
+    }
+    results.push({
+      id: record.id,
+      name: record.name,
+      description:
+        typeof record.description === "string" ? record.description : "",
+    });
+  }
+  return results;
+}
+
+function parsePlaylistTracks(data: unknown): CompiledTrack[] {
+  if (typeof data !== "object" || data === null || !("items" in data)) {
+    return [];
+  }
+  const items = (data as { items: unknown }).items;
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  const results: CompiledTrack[] = [];
+  for (const item of items) {
+    if (typeof item !== "object" || item === null || !("track" in item)) {
+      continue;
+    }
+    const parsed = parseTrack((item as { track: unknown }).track);
+    if (parsed) {
+      results.push(parsed);
+    }
+  }
+  return results;
 }
 
 async function searchCatalog(

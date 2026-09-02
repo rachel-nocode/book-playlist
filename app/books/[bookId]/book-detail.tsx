@@ -8,10 +8,17 @@ import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 import { useSpotifySession } from "../../lib/use-spotify-session";
 import { generatedAgoLabel, HOUR_MS } from "../../lib/time";
+import { mapGenreTagsToMoodFilters } from "../../../convex/lib/genreMoodMap";
+import {
+  inferVibeIds,
+  VIBE_OPTIONS,
+  type VibeId,
+} from "../../../convex/lib/vibes";
 
 export function BookDetail({ bookId }: { bookId: Id<"books"> }) {
   const { session } = useSpotifySession();
   const requestRefresh = useMutation(api.playlists.requestRefresh);
+  const setMoodTags = useMutation(api.books.setMoodTags);
   const detail = useQuery(api.books.getDetail, {
     bookId,
     sessionId: session?.sessionId ?? undefined,
@@ -19,6 +26,7 @@ export function BookDetail({ bookId }: { bookId: Id<"books"> }) {
 
   const [now] = useState(() => Date.now());
   const [refreshing, setRefreshing] = useState(false);
+  const [updatingVibe, setUpdatingVibe] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (detail === undefined) {
@@ -40,10 +48,39 @@ export function BookDetail({ bookId }: { bookId: Id<"books"> }) {
   const { book, playlist, isOwner, lastManualRefreshAt } = detail;
   const tracks = playlist?.tracks ?? [];
   const generatedAt = playlist?.refreshedAt ?? playlist?.generatedAt;
+  const inferredVibes = inferVibeIds(
+    mapGenreTagsToMoodFilters(book.genreTags).moodTags
+  );
+  const selectedVibes =
+    book.moodTags.length > 0
+      ? book.moodTags.filter((tag): tag is VibeId =>
+          VIBE_OPTIONS.some((option) => option.id === tag)
+        )
+      : inferredVibes;
   const canRefresh =
     isOwner &&
     Boolean(session?.sessionId) &&
     (lastManualRefreshAt === null || now - lastManualRefreshAt >= HOUR_MS);
+
+  async function onToggleVibe(vibeId: VibeId) {
+    if (!session?.sessionId || !isOwner || updatingVibe) {
+      return;
+    }
+    const next = toggleVibe(selectedVibes, vibeId);
+    setUpdatingVibe(true);
+    setError(null);
+    try {
+      await setMoodTags({
+        sessionId: session.sessionId,
+        bookId,
+        moodTags: next,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update vibe");
+    } finally {
+      setUpdatingVibe(false);
+    }
+  }
 
   async function onRefresh() {
     if (!session?.sessionId || refreshing || !canRefresh) {
@@ -108,17 +145,59 @@ export function BookDetail({ bookId }: { bookId: Id<"books"> }) {
         </p>
       ) : null}
 
+      <section aria-label="Playlist vibe">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">
+          Vibe
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {VIBE_OPTIONS.map((option) => {
+            const selected = selectedVibes.includes(option.id);
+            return (
+              <button
+                key={option.id}
+                type="button"
+                aria-pressed={selected}
+                disabled={!isOwner || updatingVibe || !session?.sessionId}
+                onClick={() => onToggleVibe(option.id)}
+                className={`focus-ring min-h-9 rounded-full px-3.5 text-sm font-bold transition-colors ${
+                  selected
+                    ? "bg-[#1ed760] text-black"
+                    : "bg-white/10 text-white/80 hover:bg-white/15"
+                } disabled:cursor-not-allowed disabled:opacity-50`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+        {isOwner ? (
+          <p className="mt-2 text-xs text-white/45">
+            Pick up to two. Changing vibe rebuilds the soundtrack.
+          </p>
+        ) : null}
+      </section>
+
       <section className="rounded-xl bg-[#121212] p-4 sm:p-5">
         <div className="flex items-end justify-between gap-3">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">Generated playlist</p>
             <h2 className="mt-1 text-2xl font-black">Playlist</h2>
+            {playlist?.sourceHint ? (
+              <p className="mt-1 text-sm text-white/50">{playlist.sourceHint}</p>
+            ) : null}
           </div>
           {tracks.length > 0 ? <span className="text-sm font-semibold text-[#b9f5cd]">{tracks.length} tracks</span> : null}
         </div>
+        {updatingVibe ? (
+          <p className="mt-4 text-sm font-medium text-white/55" role="status">
+            Updating soundtrack…
+          </p>
+        ) : null}
         {tracks.length === 0 ? (
           <p className="mt-4 rounded-lg bg-white/5 px-4 py-5 text-sm text-white/60">
-            {playlist ? "No tracks were found for this mood yet." : "Building a soundtrack from this book’s world…"}
+            {playlist
+              ? "No matching playlists yet. Try a different vibe."
+              : "Building a soundtrack from this book’s world…"}
           </p>
         ) : (
           <ol className="mt-4 flex flex-col gap-1">
@@ -147,6 +226,17 @@ export function BookDetail({ bookId }: { bookId: Id<"books"> }) {
       </section>
     </div>
   );
+}
+
+function toggleVibe(current: VibeId[], vibeId: VibeId): VibeId[] {
+  if (current.includes(vibeId)) {
+    return current.filter((id) => id !== vibeId);
+  }
+  if (current.length < 2) {
+    return [...current, vibeId];
+  }
+  const [, ...rest] = current;
+  return [...rest, vibeId];
 }
 
 function Cover({ title, url }: { title: string; url: string | null }) {
