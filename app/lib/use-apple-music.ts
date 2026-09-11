@@ -5,6 +5,33 @@ import { useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { authorizeAppleMusic, prefetchMusicKit } from "./musickit";
 
+let sharedPrefetch: Promise<void> | null = null;
+
+function prefetchAppleMusicAuth(
+  getDeveloperToken: (args: { origin?: string }) => Promise<{
+    configured: boolean;
+    token: string | null;
+  }>
+): Promise<void> {
+  if (!sharedPrefetch) {
+    sharedPrefetch = (async () => {
+      const tokenResponse = await getDeveloperToken({
+        origin: window.location.origin,
+      });
+      if (!tokenResponse.configured || !tokenResponse.token) {
+        throw new Error(
+          "Apple Music is not configured. Add APPLE_MUSIC_TEAM_ID, APPLE_MUSIC_KEY_ID, and APPLE_MUSIC_PRIVATE_KEY in Convex."
+        );
+      }
+      await prefetchMusicKit(tokenResponse.token);
+    })().catch((error: unknown) => {
+      sharedPrefetch = null;
+      throw error;
+    });
+  }
+  return sharedPrefetch;
+}
+
 export function useAppleMusicAuth() {
   const configured = useQuery(api.appleMusic.isConfigured);
   const getDeveloperToken = useAction(api.appleMusicActions.getDeveloperToken);
@@ -20,15 +47,7 @@ export function useAppleMusicAuth() {
     let cancelled = false;
     void (async () => {
       try {
-        const tokenResponse = await getDeveloperToken({
-          origin: window.location.origin,
-        });
-        if (!tokenResponse.configured || !tokenResponse.token) {
-          throw new Error(
-            "Apple Music is not configured. Add APPLE_MUSIC_TEAM_ID, APPLE_MUSIC_KEY_ID, and APPLE_MUSIC_PRIVATE_KEY in Convex."
-          );
-        }
-        await prefetchMusicKit(tokenResponse.token);
+        await prefetchAppleMusicAuth(getDeveloperToken);
         if (!cancelled) {
           setReady(true);
           setPrefetchError(null);

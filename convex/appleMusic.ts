@@ -108,6 +108,11 @@ export const saveLibraryPlaylist = internalMutation({
       appleMusicPlaylistUrl: args.playlistUrl,
       appleMusicCreatedAt: Date.now(),
     });
+
+    const book = await ctx.db.get(args.bookId);
+    if (book && book.musicProvider !== "appleMusic") {
+      await ctx.db.patch(args.bookId, { musicProvider: "appleMusic" });
+    }
     return null;
   },
 });

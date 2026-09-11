@@ -23,6 +23,7 @@ const LOAD_TIMEOUT_MS = 15_000;
 
 let configuredToken: string | null = null;
 let loadPromise: Promise<MusicKitGlobal> | null = null;
+let configurePromise: Promise<MusicKitGlobal> | null = null;
 
 export async function prefetchMusicKit(developerToken: string): Promise<void> {
   await ensureConfigured(developerToken);
@@ -49,20 +50,34 @@ export async function authorizeAppleMusic(): Promise<string> {
 }
 
 async function ensureConfigured(developerToken: string): Promise<MusicKitGlobal> {
-  const MusicKit = await loadMusicKit();
-  if (configuredToken !== developerToken) {
-    await Promise.resolve(
-      MusicKit.configure({
-        developerToken,
-        app: {
-          name: "Book Playlist",
-          build: "1.0.0",
-        },
-      })
-    );
-    configuredToken = developerToken;
+  if (configurePromise) {
+    return await configurePromise;
   }
-  return MusicKit;
+
+  configurePromise = (async () => {
+    const MusicKit = await loadMusicKit();
+    if (!configuredToken) {
+      await Promise.resolve(
+        MusicKit.configure({
+          developerToken,
+          app: {
+            name: "Book Playlist",
+            build: "1.0.0",
+          },
+        })
+      );
+      configuredToken = developerToken;
+    }
+    return MusicKit;
+  })();
+
+  try {
+    return await configurePromise;
+  } catch (error) {
+    configurePromise = null;
+    configuredToken = null;
+    throw error;
+  }
 }
 
 function loadMusicKit(): Promise<MusicKitGlobal> {
