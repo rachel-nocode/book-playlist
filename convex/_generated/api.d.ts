@@ -8,9 +8,13 @@
  * @module
  */
 
+import type * as appleMusic from "../appleMusic.js";
+import type * as appleMusicActions from "../appleMusicActions.js";
 import type * as books from "../books.js";
 import type * as crons from "../crons.js";
 import type * as googleBooks from "../googleBooks.js";
+import type * as lib_appleMusicConfig from "../lib/appleMusicConfig.js";
+import type * as lib_appleMusicMatch from "../lib/appleMusicMatch.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_genreMoodMap from "../lib/genreMoodMap.js";
 import type * as lib_trackMatch from "../lib/trackMatch.js";
@@ -29,9 +33,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  appleMusic: typeof appleMusic;
+  appleMusicActions: typeof appleMusicActions;
   books: typeof books;
   crons: typeof crons;
   googleBooks: typeof googleBooks;
+  "lib/appleMusicConfig": typeof lib_appleMusicConfig;
+  "lib/appleMusicMatch": typeof lib_appleMusicMatch;
   "lib/auth": typeof lib_auth;
   "lib/genreMoodMap": typeof lib_genreMoodMap;
   "lib/trackMatch": typeof lib_trackMatch;
