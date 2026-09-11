@@ -4,13 +4,13 @@ import { useState } from "react";
 import { useAppleMusicAuth } from "./lib/use-apple-music";
 
 export function AppleMusicConnect() {
-  const { configured, connect } = useAppleMusicAuth();
+  const { configured, ready, prefetchError, connect } = useAppleMusicAuth();
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function onConnect() {
-    if (connecting) {
+    if (connecting || !ready) {
       return;
     }
     setConnecting(true);
@@ -49,11 +49,20 @@ export function AppleMusicConnect() {
       <button
         type="button"
         onClick={() => void onConnect()}
-        disabled={connecting}
+        disabled={connecting || !ready}
         className="apple-music-button w-fit"
       >
-        {connecting ? "Connecting Apple Music…" : "Connect Apple Music"}
+        {connecting
+          ? "Connecting Apple Music…"
+          : !ready
+            ? "Loading Apple Music…"
+            : "Connect Apple Music"}
       </button>
+      {prefetchError ? (
+        <p className="text-sm font-medium text-red-200" role="alert">
+          {prefetchError}
+        </p>
+      ) : null}
       {error ? (
         <p className="text-sm font-medium text-red-200" role="alert">
           {error}

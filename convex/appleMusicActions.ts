@@ -12,7 +12,11 @@ import {
   appleSongToTrack,
   type AppleSongCandidate,
 } from "./lib/appleMusicMatch";
-import { appleMusicConfigured } from "./lib/appleMusicConfig";
+import {
+  allowedAppleMusicOrigins,
+  appleMusicConfigured,
+  parseOrigin,
+} from "./lib/appleMusicConfig";
 import { mapGenreTagsToMoodFilters } from "./lib/genreMoodMap";
 import {
   buildCatalogQueries,
@@ -50,7 +54,7 @@ export const getDeveloperToken = action({
     if (!appleMusicConfigured()) {
       return { configured: false, token: null };
     }
-    const origin = sanitizeOrigin(args.origin);
+    const origin = musicKitOrigin(args.origin);
     const token = await signDeveloperToken(origin);
     return { configured: true, token };
   },
@@ -79,9 +83,9 @@ export const createLibraryPlaylist = action({
       bookId: args.bookId,
     });
 
-    const developerToken =
-      usableDeveloperToken(args.developerToken) ??
-      (await signDeveloperToken());
+    // MusicKit JWTs may include `origin` and are rejected by the Music API
+    // when called from Convex. Always mint a server token with no origin.
+    const developerToken = await signDeveloperToken();
     const storefront = await getStorefront(
       developerToken,
       args.musicUserToken
@@ -161,9 +165,8 @@ export const buildSoundtrack = action({
       bookId: args.bookId,
       sessionId: args.sessionId,
     });
-    const developerToken =
-      usableDeveloperToken(args.developerToken) ??
-      (await signDeveloperToken());
+    // Ignore any MusicKit token from the client; it may be origin-bound.
+    const developerToken = await signDeveloperToken();
     const storefront = await getStorefront(
       developerToken,
       args.musicUserToken
@@ -566,27 +569,16 @@ function parseSearchPlaylists(
   return parsed;
 }
 
-function sanitizeOrigin(origin: string | undefined): string | undefined {
-  if (!origin) {
+function musicKitOrigin(origin: string | undefined): string | undefined {
+  const allowed = allowedAppleMusicOrigins();
+  const sanitized = parseOrigin(origin ?? "");
+  if (allowed.length === 0) {
     return undefined;
   }
-  try {
-    const url = new URL(origin);
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      return undefined;
-    }
-    return url.origin;
-  } catch {
-    return undefined;
+  if (!sanitized || !allowed.includes(sanitized)) {
+    throw new Error("This site is not allowed to use Apple Music");
   }
-}
-
-function usableDeveloperToken(token: string | undefined): string | undefined {
-  if (!token) {
-    return undefined;
-  }
-  const parts = token.split(".");
-  return parts.length === 3 ? token : undefined;
+  return sanitized;
 }
 
 async function signDeveloperToken(origin?: string): Promise<string> {
@@ -708,6 +700,28 @@ async function createApplePlaylist(
     songs: AppleSongCandidate[];
   }
 ): Promise<{ id: string; url: string }> {
+  const trackData = args.songs.map((song) => ({
+    id: song.id,
+    type: "songs" as const,
+  }));
+
+  try {
+    const seeded = await postLibraryPlaylist(developerToken, musicUserToken, {
+      attributes: {
+        name: args.name,
+        description: args.description,
+      },
+      relationships: {
+        tracks: { data: trackData },
+      },
+    });
+    if (seeded) {
+      return seeded;
+    }
+  } catch {
+    // Some accounts reject tracks on create. Fall through to add-after-create.
+  }
+
   const created = await postLibraryPlaylist(developerToken, musicUserToken, {
     attributes: {
       name: args.name,
@@ -724,20 +738,33 @@ async function createApplePlaylist(
     musicUserToken,
     {
       method: "POST",
-      body: JSON.stringify({
-        data: args.songs.map((song) => ({
-          id: song.id,
-          type: "songs" as const,
-        })),
-      }),
+      body: JSON.stringify({ data: trackData }),
     }
   );
   if (!addResponse.ok) {
+    await deleteLibraryPlaylist(developerToken, musicUserToken, created.id);
     const data: unknown = await addResponse.json().catch(() => null);
     throw new Error(appleError(data, "Could not add tracks to Apple Music"));
   }
 
   return created;
+}
+
+async function deleteLibraryPlaylist(
+  developerToken: string,
+  musicUserToken: string,
+  playlistId: string
+): Promise<void> {
+  try {
+    await appleFetch(
+      `${APPLE_API}/me/library/playlists/${encodeURIComponent(playlistId)}`,
+      developerToken,
+      musicUserToken,
+      { method: "DELETE" }
+    );
+  } catch {
+    // Best effort: the add-tracks error is what the user needs to see.
+  }
 }
 
 async function postLibraryPlaylist(

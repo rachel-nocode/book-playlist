@@ -22,7 +22,7 @@ export function BookSearch() {
   const createBook = useMutation(api.books.create);
   const buildApplePlaylist = useAction(api.appleMusicActions.buildSoundtrack);
   const { session } = useSpotifySession();
-  const { connect } = useAppleMusicAuth();
+  const { configured, ready, prefetchError, connect } = useAppleMusicAuth();
   const router = useRouter();
 
   const [title, setTitle] = useState("");
@@ -56,7 +56,7 @@ export function BookSearch() {
   }
 
   async function onPick(result: SearchResult) {
-    if (savingId || saved[result.googleBooksId]) {
+    if (savingId || saved[result.googleBooksId] || !ready) {
       return;
     }
 
@@ -79,7 +79,6 @@ export function BookSearch() {
         sessionId: session?.sessionId ?? undefined,
         bookId,
         musicUserToken: apple.musicUserToken,
-        developerToken: apple.developerToken,
       });
       setSaved((current) => ({ ...current, [result.googleBooksId]: bookId }));
       router.push(`/books/${bookId}`);
@@ -122,6 +121,12 @@ export function BookSearch() {
         </button>
       </form>
 
+      {prefetchError ? (
+        <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm font-medium text-red-200" role="alert">
+          {prefetchError}
+        </p>
+      ) : null}
+
       {error ? (
         <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm font-medium text-red-200" role="alert">
           {error}
@@ -157,7 +162,13 @@ export function BookSearch() {
                 <button
                   type="button"
                   onClick={() => onPick(result)}
-                  disabled={isSaving || isSaved || savingId !== null}
+                  disabled={
+                    isSaving ||
+                    isSaved ||
+                    savingId !== null ||
+                    !ready ||
+                    configured === false
+                  }
                   className="focus-ring flex min-h-24 w-full items-center gap-3 rounded-lg bg-[#242424] p-2.5 text-left transition-colors hover:bg-[#303030] active:bg-[#383838] disabled:opacity-70"
                 >
                   <Cover title={result.title} url={result.coverUrl} />
@@ -174,7 +185,9 @@ export function BookSearch() {
                       ? "Saved"
                       : isSaving
                         ? "Creating playlist…"
-                        : "Apple Music"}
+                        : !ready && configured !== false
+                          ? "Loading…"
+                          : "Apple Music"}
                   </span>
                 </button>
               </li>

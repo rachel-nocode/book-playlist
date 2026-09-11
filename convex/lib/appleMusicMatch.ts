@@ -49,10 +49,11 @@ export function scoreAppleSongMatch(
   const artistHits = artistTokens.filter((token) =>
     songArtist.includes(token)
   ).length;
+  if (artistTokens.length > 0 && artistHits === 0) {
+    return 0;
+  }
   if (artistHits > 0) {
     score += Math.min(6, artistHits * 2);
-  } else {
-    score -= 4;
   }
 
   for (const extra of VERSION_PENALTIES) {

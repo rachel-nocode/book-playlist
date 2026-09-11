@@ -1,10 +1,10 @@
 "use client";
 
-import { useAction, useQuery } from "convex/react";
+import { useAction } from "convex/react";
 import { useState } from "react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
-import { authorizeAppleMusic } from "./lib/musickit";
+import { useAppleMusicAuth } from "./lib/use-apple-music";
 
 export function AppleMusicSave({
   bookId,
@@ -15,8 +15,7 @@ export function AppleMusicSave({
   sessionId: Id<"sessions">;
   playlistUrl: string | undefined;
 }) {
-  const configured = useQuery(api.appleMusic.isConfigured);
-  const getDeveloperToken = useAction(api.appleMusicActions.getDeveloperToken);
+  const { configured, ready, prefetchError, connect } = useAppleMusicAuth();
   const createPlaylist = useAction(api.appleMusicActions.buildSoundtrack);
 
   const [saving, setSaving] = useState(false);
@@ -27,7 +26,7 @@ export function AppleMusicSave({
   );
 
   const latestUrl = createdUrl ?? playlistUrl;
-  const disabled = saving || configured === false;
+  const disabled = saving || configured === false || !ready;
 
   async function onSave() {
     if (disabled) {
@@ -37,21 +36,11 @@ export function AppleMusicSave({
     setError(null);
     setUnmatched([]);
     try {
-      const tokenResponse = await getDeveloperToken({
-        origin: window.location.origin,
-      });
-      if (!tokenResponse.configured || !tokenResponse.token) {
-        throw new Error(
-          "Apple Music is not configured. Add APPLE_MUSIC_TEAM_ID, APPLE_MUSIC_KEY_ID, and APPLE_MUSIC_PRIVATE_KEY."
-        );
-      }
-
-      const musicUserToken = await authorizeAppleMusic(tokenResponse.token);
+      const apple = await connect();
       const result = await createPlaylist({
         sessionId,
         bookId,
-        musicUserToken,
-        developerToken: tokenResponse.token,
+        musicUserToken: apple.musicUserToken,
       });
       setCreatedUrl(result.playlistUrl);
       setUnmatched(result.unmatched);
@@ -73,9 +62,11 @@ export function AppleMusicSave({
         >
           {saving
             ? "Creating Apple Music playlist…"
-            : latestUrl
-              ? "Save a new Apple Music playlist"
-              : "Create Apple Music playlist"}
+            : !ready && configured !== false
+              ? "Loading Apple Music…"
+              : latestUrl
+                ? "Save a new Apple Music playlist"
+                : "Create Apple Music playlist"}
         </button>
         {latestUrl ? (
           <a
@@ -91,6 +82,11 @@ export function AppleMusicSave({
       {configured === false ? (
         <p className="text-xs text-white/45">
           Apple Music keys are not set yet, so this stays disabled.
+        </p>
+      ) : null}
+      {prefetchError ? (
+        <p className="text-xs text-red-200" role="alert">
+          {prefetchError}
         </p>
       ) : null}
       {error ? (
