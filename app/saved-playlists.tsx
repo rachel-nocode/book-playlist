@@ -86,65 +86,51 @@ export function SavedPlaylists() {
 
   if (waitingOnSession || waitingOnLocal) {
     return (
-      <p className="text-sm font-medium text-white/55" role="status">
-        Loading your library…
+      <p className="text-sm text-ink" role="status">
+        Opening your shelf…
       </p>
     );
   }
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-white/15 px-4 py-7 text-center">
-        <p className="text-base font-bold">Your library is waiting.</p>
-        <p className="mt-1 text-sm text-white/55">
-          Search for a book above to create your first soundtrack.
+      <section>
+        <ShelfHeading count={0} />
+        <p className="border-t border-rule/80 pt-6 text-sm text-ink">
+          Empty shelf. Search a title and we’ll start stacking.
         </p>
-      </div>
+      </section>
     );
   }
 
   return (
-    <section className="flex flex-col gap-4">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">Your library</p>
-          <h2 className="mt-1 text-2xl font-black tracking-tight">Made for your books</h2>
-        </div>
-        <span className="text-sm text-white/45">{rows.length} saved</span>
-      </div>
-      <ul className="grid gap-2 sm:grid-cols-2">
+    <section>
+      <ShelfHeading count={rows.length} />
+      <ul className="grid grid-cols-3 gap-x-4 gap-y-8 sm:grid-cols-4 lg:grid-cols-6">
         {rows.map(({ book, playlist }) => (
           <li key={book._id} className="group relative">
-            <Link
-              href={`/books/${book._id}`}
-              className="focus-ring flex min-h-28 items-center gap-3 rounded-lg bg-[#242424] p-3 pr-10 transition-colors hover:bg-[#303030] active:bg-[#383838]"
-            >
+            <Link href={`/books/${book._id}`} className="focus-ring block">
               <BookArt title={book.title} url={book.coverUrl ?? null} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-base font-bold">{book.title}</span>
-                <span className="mt-0.5 block truncate text-sm text-white/60">{book.author}</span>
-                {playlist ? (
-                  <span className="mt-2 block text-xs font-semibold text-[#b9f5cd]">
-                    {playlist.trackIds.length} tracks · updated{" "}
-                    {new Date(playlist.refreshedAt).toLocaleDateString()}
-                    {playlist.appleMusicPlaylistUrl ? " · Apple Music" : ""}
-                  </span>
-                ) : (
-                  <span className="mt-2 block text-xs font-semibold text-white/45">
-                    Building your soundtrack…
-                  </span>
-                )}
+              <span className="mt-2 block font-serif text-sm leading-snug text-foreground">
+                {book.title}
               </span>
-              <span className="text-xl text-white/35 transition-transform group-hover:translate-x-0.5 group-hover:text-white" aria-hidden>
-                ›
+              <span className="mt-0.5 block truncate text-xs text-ink">
+                {book.author}
               </span>
+              {playlist ? (
+                <span className="mt-1 block text-[11px] text-gold">
+                  {playlist.trackIds.length} tracks
+                </span>
+              ) : (
+                <span className="mt-1 block text-[11px] text-ink">Scoring…</span>
+              )}
             </Link>
             <button
               type="button"
               onClick={() => void handleRemove(book._id)}
               disabled={removingId === book._id}
               aria-label={`Remove ${book.title} from your library`}
-              className="focus-ring absolute right-2 top-2 flex size-7 items-center justify-center rounded-full bg-black/60 text-white/70 opacity-0 backdrop-blur-sm transition-all hover:bg-red-600 hover:text-white group-hover:opacity-100 disabled:opacity-50"
+              className="focus-ring absolute -right-1 -top-1 flex size-7 items-center justify-center rounded-full bg-[#14110e]/90 text-ink opacity-100 transition-colors hover:bg-[#7a2e2e] hover:text-[#f8ece4] md:opacity-0 md:group-hover:opacity-100"
             >
               {removingId === book._id ? (
                 <span className="size-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />
@@ -161,10 +147,24 @@ export function SavedPlaylists() {
   );
 }
 
+function ShelfHeading({ count }: { count: number }) {
+  return (
+    <div className="mb-6 flex items-end justify-between gap-4 border-b border-rule/80 pb-3">
+      <h2 className="font-serif text-2xl tracking-tight">My books</h2>
+      <span className="text-xs uppercase tracking-[0.16em] text-ink">
+        {count} {count === 1 ? "title" : "titles"}
+      </span>
+    </div>
+  );
+}
+
 function BookArt({ title, url }: { title: string; url: string | null }) {
   if (!url) {
     return (
-      <span className="flex size-16 shrink-0 items-center justify-center rounded bg-gradient-to-br from-[#5d6fba] to-[#202a52] text-xl font-black text-white/85" aria-hidden>
+      <span
+        className="cover-shadow flex aspect-[2/3] w-full items-center justify-center bg-[#261f18] font-serif text-3xl text-gold"
+        aria-hidden
+      >
         {title.charAt(0)}
       </span>
     );
@@ -174,9 +174,9 @@ function BookArt({ title, url }: { title: string; url: string | null }) {
     <Image
       src={url}
       alt=""
-      width={64}
-      height={64}
-      className="size-16 shrink-0 rounded object-cover shadow-lg shadow-black/30"
+      width={160}
+      height={240}
+      className="cover-shadow aspect-[2/3] w-full object-cover"
     />
   );
 }

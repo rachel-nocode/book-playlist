@@ -16,10 +16,10 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   title: "Book Playlist",
-  description: "Mobile-first book playlists",
+  description: "Dark-mode soundtracks for whatever you’re reading",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     title: "Book Playlist",
   },
   formatDetection: {
@@ -34,8 +34,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+    { media: "(prefers-color-scheme: light)", color: "#14110e" },
+    { media: "(prefers-color-scheme: dark)", color: "#14110e" },
   ],
 };
 
@@ -45,7 +45,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="bg-[#14110e]">
       <body
         className={`${geistSans.variable} ${geistMono.variable} min-h-dvh antialiased`}
       >

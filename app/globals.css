@@ -3,8 +3,14 @@
 @tailwind utilities;
 
 :root {
-  --background: #000000;
-  --foreground: #f5f5f5;
+  --background: #14110e;
+  --foreground: #f4ead9;
+  --paper: #1d1813;
+  --paper-2: #261f18;
+  --ink-muted: #b7a894;
+  --gold: #e4c37a;
+  --gold-strong: #d4a84b;
+  --rule: #3d342b;
 }
 
 html {
@@ -17,33 +23,44 @@ body {
   background: var(--background);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
   font-size: 16px;
-  line-height: 1.5;
+  line-height: 1.55;
+  background-image:
+    radial-gradient(1200px 500px at 50% -120px, rgba(228, 195, 122, 0.08), transparent 60%),
+    linear-gradient(180deg, #1a1612 0%, #14110e 28%);
 }
 
 ::selection {
-  background: #1ed760;
-  color: #000000;
+  background: #e4c37a;
+  color: #1a140e;
 }
 
 @layer components {
   .focus-ring {
-    @apply outline-none focus-visible:ring-2 focus-visible:ring-[#1ed760] focus-visible:ring-offset-2 focus-visible:ring-offset-black;
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
 
-  .spotify-surface {
-    @apply rounded-xl bg-[#181818] transition-colors duration-200 hover:bg-[#242424];
+  .shelf-surface {
+    @apply rounded-sm border border-rule-80 bg-paper;
   }
 
-  .spotify-button {
-    @apply focus-ring inline-flex min-h-11 items-center justify-center rounded-full bg-[#1ed760] px-5 text-sm font-bold text-black transition-transform duration-200 hover:scale-[1.03] hover:bg-[#3bea7a] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100;
+  .gold-button {
+    @apply focus-ring inline-flex min-h-11 items-center justify-center rounded-sm bg-gold px-5 text-sm font-semibold tracking-wide text-[#1a140e] transition-colors hover:bg-[#edd59a] active:bg-[#d4a84b] disabled:cursor-not-allowed disabled:opacity-40;
   }
 
-  .spotify-ghost-button {
-    @apply focus-ring inline-flex min-h-10 items-center justify-center rounded-full border border-white/25 px-4 text-sm font-bold text-white transition-colors hover:border-white hover:scale-[1.02] active:scale-[0.98];
+  .ghost-button {
+    @apply focus-ring inline-flex min-h-10 items-center justify-center rounded-sm border border-rule px-4 text-sm font-medium text-foreground-90 transition-colors hover:border-gold-50 hover:text-gold;
   }
 
   .apple-music-button {
-    @apply focus-ring inline-flex min-h-11 items-center justify-center rounded-full bg-[#fa243c] px-5 text-sm font-bold text-white transition-transform duration-200 hover:scale-[1.03] hover:bg-[#ff4d55] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100;
+    @apply focus-ring inline-flex min-h-11 items-center justify-center rounded-sm bg-[#7a2e2e] px-5 text-sm font-semibold text-[#f8ece4] transition-colors hover:bg-[#934040] active:bg-[#652525] disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .page-shell {
+    @apply mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-8;
+  }
+
+  .cover-shadow {
+    @apply shadow-cover;
   }
 }
 

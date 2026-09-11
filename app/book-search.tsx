@@ -108,69 +108,66 @@ export function BookSearch() {
   }
 
   return (
-    <div className="flex w-full flex-col gap-4">
-      <form onSubmit={onSubmit} className="flex flex-col gap-2 sm:flex-row">
+    <div className="flex w-full flex-col gap-6">
+      <form onSubmit={onSubmit} className="mx-auto flex w-full max-w-2xl flex-col gap-3 sm:flex-row sm:items-end">
         <label htmlFor="book-title" className="sr-only">
           Search books by title
         </label>
         <div className="relative min-w-0 flex-1">
-          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-xl text-white/50" aria-hidden>
-            ⌕
-          </span>
           <input
             id="book-title"
             type="search"
             name="q"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder="Search a book to make an Apple Music playlist"
+            placeholder="Title, author, or that one with the lighthouse"
             autoComplete="off"
             autoCapitalize="words"
             enterKeyHint="search"
-            className="focus-ring min-h-12 w-full rounded-full border border-transparent bg-[#2a2a2a] py-3 pl-11 pr-4 text-base placeholder:text-white/45 hover:bg-[#333]"
+            className="focus-ring min-h-12 w-full border-0 border-b border-rule bg-transparent px-0 py-3 text-lg text-foreground placeholder:text-ink/80 hover:border-gold/40"
           />
         </div>
         <button
           type="submit"
           disabled={searching || !title.trim()}
-          className="spotify-button shrink-0"
+          className="gold-button shrink-0"
         >
           {searching ? "Searching…" : "Search"}
         </button>
       </form>
 
       {prefetchError ? (
-        <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm font-medium text-red-200" role="alert">
+        <p className="rounded-sm border border-[#7a2e2e]/50 bg-[#7a2e2e]/15 px-3 py-2 text-sm text-[#e7b4a8]" role="alert">
           {prefetchError}
         </p>
       ) : null}
 
       {error ? (
-        <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm font-medium text-red-200" role="alert">
+        <p className="rounded-sm border border-[#7a2e2e]/50 bg-[#7a2e2e]/15 px-3 py-2 text-sm text-[#e7b4a8]" role="alert">
           {error}
         </p>
       ) : null}
 
       {searching ? (
-        <p className="text-sm font-medium text-white/55" role="status">
-          Finding books and their worlds…
+        <p className="text-center text-sm text-ink" role="status">
+          Pulling titles from the stacks…
         </p>
       ) : null}
 
       {!searching && searched && results.length === 0 && !error ? (
-        <p className="text-sm text-white/55" role="status">
-          No books found. Try a title, author, or a shorter search.
+        <p className="text-center text-sm text-ink" role="status">
+          Nothing on the shelf for that. Try a shorter title.
         </p>
       ) : null}
 
       {results.length > 0 ? (
-        <p className="text-sm text-white/55">
-          Tap a book to sign in to Apple Music and create a playlist from its vibe.
+        <p className="text-sm text-ink">
+          Tap a book to make its Apple Music playlist.
         </p>
       ) : null}
 
       {results.length > 0 ? (
-        <ul className="grid gap-2 sm:grid-cols-2" aria-label="Search results">
+        <ul className="divide-y divide-rule/80 border-y border-rule/80" aria-label="Search results">
           {results.map((result) => {
             const isSaving = savingId === result.googleBooksId;
             const isSaved = Boolean(saved[result.googleBooksId]);
@@ -186,26 +183,31 @@ export function BookSearch() {
                     (!isSaved &&
                       (session === null || !ready || configured === false))
                   }
-                  className="focus-ring flex min-h-24 w-full items-center gap-3 rounded-lg bg-[#242424] p-2.5 text-left transition-colors hover:bg-[#303030] active:bg-[#383838] disabled:opacity-70"
+                  className="focus-ring flex min-h-28 w-full items-start gap-4 py-4 text-left transition-colors hover:bg-[#1d1813] disabled:opacity-70"
                 >
                   <Cover title={result.title} url={result.coverUrl} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-base font-medium">
+                  <span className="min-w-0 flex-1 pt-0.5">
+                    <span className="block font-serif text-xl leading-snug text-foreground">
                       {result.title}
                     </span>
-                    <span className="block truncate text-sm text-foreground/70">
+                    <span className="mt-1 block text-sm text-ink">
                       {result.author}
                     </span>
+                    {result.genreTags.length > 0 ? (
+                      <span className="mt-2 block text-xs text-ink/80">
+                        {result.genreTags.slice(0, 3).join(" · ")}
+                      </span>
+                    ) : null}
                   </span>
-                  <span className="shrink-0 rounded-full bg-[#fa243c] px-2.5 py-1 text-xs font-bold text-white">
+                  <span className="mt-1 shrink-0 text-xs font-semibold uppercase tracking-wide text-gold">
                     {isSaved
-                      ? "Saved"
+                      ? "On your shelf"
                       : isSaving
-                        ? "Creating playlist…"
+                        ? "Scoring…"
                         : session === null ||
                             (!ready && configured !== false)
                           ? "Loading…"
-                          : "Apple Music"}
+                          : "Want soundtrack"}
                   </span>
                 </button>
               </li>
@@ -221,7 +223,7 @@ function Cover({ title, url }: { title: string; url: string | null }) {
   if (!url) {
     return (
       <span
-        className="flex h-24 w-16 shrink-0 items-center justify-center rounded bg-foreground/10 text-lg font-medium text-foreground/50"
+        className="cover-shadow flex h-[105px] w-[70px] shrink-0 items-center justify-center bg-[#261f18] font-serif text-2xl text-gold"
         aria-hidden
       >
         {title.charAt(0)}
@@ -233,9 +235,9 @@ function Cover({ title, url }: { title: string; url: string | null }) {
     <Image
       src={url}
       alt=""
-      width={64}
-      height={96}
-      className="h-24 w-16 shrink-0 rounded object-cover"
+      width={70}
+      height={105}
+      className="h-[105px] w-[70px] shrink-0 object-cover cover-shadow"
     />
   );
 }

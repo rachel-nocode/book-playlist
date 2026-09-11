@@ -1,5 +1,6 @@
 import { BookDetail } from "./book-detail";
 import { Id } from "../../../convex/_generated/dataModel";
+import { SiteHeader } from "../../site-header";
 
 export default function BookPage({
   params,
@@ -7,8 +8,9 @@ export default function BookPage({
   params: { bookId: string };
 }) {
   return (
-    <main className="min-h-dvh bg-black px-4 py-4 text-white sm:px-6 lg:px-8">
-      <div className="mx-auto w-full max-w-4xl rounded-2xl bg-[#181818] p-4 sm:p-6">
+    <main className="min-h-dvh text-foreground">
+      <SiteHeader />
+      <div className="page-shell pb-16 pt-6 sm:pt-8">
         <BookDetail bookId={params.bookId as Id<"books">} />
       </div>
     </main>
