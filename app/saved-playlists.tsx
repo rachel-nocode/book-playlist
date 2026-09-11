@@ -4,34 +4,84 @@ import { useMutation, useQuery } from "convex/react";
 import { Id } from "../convex/_generated/dataModel";
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../convex/_generated/api";
 import { useSpotifySession } from "./lib/use-spotify-session";
+import {
+  readLocalLibrary,
+  removeFromLocalLibrary,
+} from "./lib/local-library";
+
+type LibraryRow = {
+  book: {
+    _id: Id<"books">;
+    title: string;
+    author: string;
+    coverUrl?: string;
+  };
+  playlist: {
+    trackIds: string[];
+    refreshedAt: number;
+    appleMusicPlaylistUrl?: string;
+  } | null;
+};
 
 export function SavedPlaylists() {
   const { session } = useSpotifySession();
   const removeBook = useMutation(api.books.remove);
   const [removingId, setRemovingId] = useState<Id<"books"> | null>(null);
-  const rows = useQuery(
+  const [localIds, setLocalIds] = useState<Id<"books">[]>([]);
+
+  useEffect(() => {
+    setLocalIds(readLocalLibrary());
+  }, []);
+
+  const sessionRows = useQuery(
     api.books.listWithPlaylists,
     session?.sessionId ? { sessionId: session.sessionId } : "skip"
   );
+  const localRows = useQuery(
+    api.books.listByIds,
+    localIds.length > 0 ? { bookIds: localIds } : "skip"
+  );
+
+  const rows = useMemo(() => {
+    const merged = new Map<Id<"books">, LibraryRow>();
+    for (const row of localRows ?? []) {
+      merged.set(row.book._id, row);
+    }
+    for (const row of sessionRows ?? []) {
+      merged.set(row.book._id, row);
+    }
+    return [...merged.values()];
+  }, [localRows, sessionRows]);
 
   async function handleRemove(bookId: Id<"books">) {
-    if (!session?.sessionId || removingId) return;
+    if (removingId) return;
     setRemovingId(bookId);
     try {
-      await removeBook({ sessionId: session.sessionId, bookId });
+      if (session?.sessionId) {
+        try {
+          await removeBook({ sessionId: session.sessionId, bookId });
+        } catch {
+          // Apple-only books are stored locally and may have no Spotify owner.
+        }
+      }
+      removeFromLocalLibrary(bookId);
+      setLocalIds(readLocalLibrary());
     } finally {
       setRemovingId(null);
     }
   }
 
-  if (!session?.connected) {
+  const waitingOnSession = Boolean(session?.sessionId) && sessionRows === undefined;
+  const waitingOnLocal = localIds.length > 0 && localRows === undefined;
+
+  if (!session?.connected && localIds.length === 0) {
     return null;
   }
 
-  if (rows === undefined) {
+  if (waitingOnSession || waitingOnLocal) {
     return (
       <p className="text-sm font-medium text-white/55" role="status">
         Loading your library…

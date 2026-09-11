@@ -10,10 +10,12 @@ export function AppleMusicSave({
   bookId,
   sessionId,
   playlistUrl,
+  allowCreate = true,
 }: {
   bookId: Id<"books">;
-  sessionId: Id<"sessions">;
+  sessionId: Id<"sessions"> | undefined;
   playlistUrl: string | undefined;
+  allowCreate?: boolean;
 }) {
   const { configured, ready, prefetchError, connect } = useAppleMusicAuth();
   const createPlaylist = useAction(api.appleMusicActions.buildSoundtrack);
@@ -26,10 +28,10 @@ export function AppleMusicSave({
   );
 
   const latestUrl = createdUrl ?? playlistUrl;
-  const disabled = saving || configured === false || !ready;
+  const disabled = saving || configured === false || !ready || !allowCreate;
 
   async function onSave() {
-    if (disabled) {
+    if (disabled || !allowCreate) {
       return;
     }
     setSaving(true);
@@ -54,20 +56,22 @@ export function AppleMusicSave({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => void onSave()}
-          disabled={disabled}
-          className="apple-music-button"
-        >
-          {saving
-            ? "Creating Apple Music playlist…"
-            : !ready && configured !== false
-              ? "Loading Apple Music…"
-              : latestUrl
-                ? "Save a new Apple Music playlist"
-                : "Create Apple Music playlist"}
-        </button>
+        {allowCreate ? (
+          <button
+            type="button"
+            onClick={() => void onSave()}
+            disabled={disabled}
+            className="apple-music-button"
+          >
+            {saving
+              ? "Creating Apple Music playlist…"
+              : !ready && configured !== false
+                ? "Loading Apple Music…"
+                : latestUrl
+                  ? "Save a new Apple Music playlist"
+                  : "Create Apple Music playlist"}
+          </button>
+        ) : null}
         {latestUrl ? (
           <a
             href={latestUrl}
@@ -79,12 +83,12 @@ export function AppleMusicSave({
           </a>
         ) : null}
       </div>
-      {configured === false ? (
+      {allowCreate && configured === false ? (
         <p className="text-xs text-white/45">
           Apple Music keys are not set yet, so this stays disabled.
         </p>
       ) : null}
-      {prefetchError ? (
+      {allowCreate && prefetchError ? (
         <p className="text-xs text-red-200" role="alert">
           {prefetchError}
         </p>

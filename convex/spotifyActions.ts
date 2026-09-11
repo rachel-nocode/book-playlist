@@ -136,6 +136,7 @@ export const refreshUserPlaylists = internalAction({
     });
 
     for (const book of books) {
+      // Apple Music books are refreshed by kickoffDailyRefresh → refreshCatalog.
       if (book.musicProvider === "appleMusic") {
         continue;
       }

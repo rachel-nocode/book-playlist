@@ -106,9 +106,41 @@ export const kickoffDailyRefresh = internalMutation({
       delayMs += 2000;
     }
 
+    await scheduleAppleCatalogRefreshes(ctx, delayMs);
     return null;
   },
 });
+
+async function scheduleAppleCatalogRefreshes(
+  ctx: MutationCtx,
+  startDelayMs: number
+): Promise<void> {
+  let delayMs = startDelayMs;
+  let cursor: string | null = null;
+
+  while (true) {
+    const page = await ctx.db
+      .query("books")
+      .withIndex("by_musicProvider", (q) =>
+        q.eq("musicProvider", "appleMusic")
+      )
+      .paginate({ numItems: 100, cursor });
+
+    for (const book of page.page) {
+      await ctx.scheduler.runAfter(
+        delayMs,
+        internal.appleMusicActions.refreshCatalog,
+        { bookId: book._id }
+      );
+      delayMs += 500;
+    }
+
+    if (page.isDone) {
+      break;
+    }
+    cursor = page.continueCursor;
+  }
+}
 
 async function collectUserIdsWithBooks(
   ctx: MutationCtx

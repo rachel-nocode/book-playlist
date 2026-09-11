@@ -8,6 +8,7 @@ import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
 import { useSpotifySession } from "./lib/use-spotify-session";
 import { useAppleMusicAuth } from "./lib/use-apple-music";
+import { addToLocalLibrary } from "./lib/local-library";
 
 type SearchResult = {
   googleBooksId: string;
@@ -80,6 +81,7 @@ export function BookSearch() {
         bookId,
         musicUserToken: apple.musicUserToken,
       });
+      addToLocalLibrary(bookId);
       setSaved((current) => ({ ...current, [result.googleBooksId]: bookId }));
       router.push(`/books/${bookId}`);
     } catch (err) {

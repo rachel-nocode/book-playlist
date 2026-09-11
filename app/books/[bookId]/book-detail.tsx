@@ -62,6 +62,10 @@ export function BookDetail({ bookId }: { bookId: Id<"books"> }) {
     isOwner &&
     Boolean(session?.sessionId) &&
     (lastManualRefreshAt === null || now - lastManualRefreshAt >= HOUR_MS);
+  const showOwnerControls = isOwner && Boolean(session?.sessionId);
+  const canCreateApplePlaylist = isOwner || !book.userId;
+  const showAppleMusic =
+    canCreateApplePlaylist || Boolean(playlist?.appleMusicPlaylistUrl);
 
   async function onToggleVibe(vibeId: VibeId) {
     if (!session?.sessionId || !isOwner || updatingVibe) {
@@ -125,25 +129,28 @@ export function BookDetail({ bookId }: { bookId: Id<"books"> }) {
       </div>
       </div>
 
-      {isOwner ? (
+      {showOwnerControls || showAppleMusic ? (
         <div className="flex flex-col gap-3">
-          <button
-            type="button"
-            onClick={onRefresh}
-            disabled={!canRefresh || refreshing}
-            className="spotify-button w-fit"
-          >
-            {refreshing
-              ? "Refreshing…"
-              : canRefresh
-                ? "Refresh now"
-                : "Refresh available in 1 hour"}
-          </button>
-          {session?.sessionId ? (
+          {showOwnerControls ? (
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={!canRefresh || refreshing}
+              className="spotify-button w-fit"
+            >
+              {refreshing
+                ? "Refreshing…"
+                : canRefresh
+                  ? "Refresh now"
+                  : "Refresh available in 1 hour"}
+            </button>
+          ) : null}
+          {showAppleMusic ? (
             <AppleMusicSave
               bookId={bookId}
-              sessionId={session.sessionId}
+              sessionId={session?.sessionId ?? undefined}
               playlistUrl={playlist?.appleMusicPlaylistUrl}
+              allowCreate={canCreateApplePlaylist}
             />
           ) : null}
         </div>

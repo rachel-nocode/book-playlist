@@ -63,38 +63,46 @@ export const create = mutation({
 
     const userId = await userIdFromSession(ctx, args.sessionId);
 
-    const existing = await ctx.db
-      .query("books")
-      .withIndex("by_googleBooksId", (q) =>
-        q.eq("googleBooksId", args.googleBooksId)
-      )
-      .first();
+    const existing = userId
+      ? await ctx.db
+          .query("books")
+          .withIndex("by_user_and_googleBooksId", (q) =>
+            q.eq("userId", userId).eq("googleBooksId", args.googleBooksId)
+          )
+          .first()
+      : null;
 
-    let bookId = existing?._id;
-    if (existing && userId && !existing.userId) {
-      await ctx.db.patch(existing._id, { userId });
-    }
-    if (existing && args.coverUrl && !existing.coverUrl) {
-      await ctx.db.patch(existing._id, { coverUrl: args.coverUrl });
-    }
-    if (existing && args.destination && existing.musicProvider !== args.destination) {
-      await ctx.db.patch(existing._id, { musicProvider: args.destination });
+    if (existing) {
+      if (args.coverUrl && !existing.coverUrl) {
+        await ctx.db.patch(existing._id, { coverUrl: args.coverUrl });
+      }
+      if (args.destination && existing.musicProvider !== args.destination) {
+        await ctx.db.patch(existing._id, {
+          musicProvider: args.destination,
+        });
+      }
+      if (userId && args.destination !== "appleMusic") {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.spotifyActions.refreshBookPlaylist,
+          { bookId: existing._id }
+        );
+      }
+      return existing._id;
     }
 
-    if (!bookId) {
-      bookId = await ctx.db.insert("books", {
-        googleBooksId: args.googleBooksId,
-        title: args.title.trim(),
-        author: args.author.trim(),
-        genreTags: args.genreTags,
-        moodTags: args.moodTags,
-        addedBy: await getAddedBy(ctx),
-        userId,
-        coverUrl: args.coverUrl,
-        createdAt: Date.now(),
-        musicProvider: args.destination,
-      });
-    }
+    const bookId = await ctx.db.insert("books", {
+      googleBooksId: args.googleBooksId,
+      title: args.title.trim(),
+      author: args.author.trim(),
+      genreTags: args.genreTags,
+      moodTags: args.moodTags,
+      addedBy: await getAddedBy(ctx),
+      userId,
+      coverUrl: args.coverUrl,
+      createdAt: Date.now(),
+      musicProvider: args.destination,
+    });
 
     if (userId && args.destination !== "appleMusic") {
       await ctx.scheduler.runAfter(
@@ -119,6 +127,39 @@ export const getWithPlaylist = query({
   ),
   handler: async (ctx, args) => {
     return await getBookWithPlaylist(ctx, args.bookId);
+  },
+});
+
+export const listByIds = query({
+  args: { bookIds: v.array(v.id("books")) },
+  returns: v.array(
+    v.object({
+      book: bookDoc,
+      playlist: v.union(playlistDoc, v.null()),
+    })
+  ),
+  handler: async (ctx, args) => {
+    const unique: Id<"books">[] = [];
+    for (const bookId of args.bookIds) {
+      if (!unique.includes(bookId)) {
+        unique.push(bookId);
+      }
+      if (unique.length >= 50) {
+        break;
+      }
+    }
+
+    const result: Array<{
+      book: Doc<"books">;
+      playlist: Doc<"playlists"> | null;
+    }> = [];
+    for (const bookId of unique) {
+      const row = await getBookWithPlaylist(ctx, bookId);
+      if (row) {
+        result.push(row);
+      }
+    }
+    return result;
   },
 });
 

@@ -40,7 +40,9 @@ export default defineSchema({
   })
     .index("by_googleBooksId", ["googleBooksId"])
     .index("by_addedBy", ["addedBy"])
-    .index("by_user", ["userId"]),
+    .index("by_user", ["userId"])
+    .index("by_user_and_googleBooksId", ["userId", "googleBooksId"])
+    .index("by_musicProvider", ["musicProvider"]),
 
   playlists: defineTable({
     bookId: v.id("books"),
