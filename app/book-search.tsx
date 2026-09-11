@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAction, useMutation } from "convex/react";
@@ -8,7 +8,11 @@ import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
 import { useSpotifySession } from "./lib/use-spotify-session";
 import { useAppleMusicAuth } from "./lib/use-apple-music";
-import { addToLocalLibrary } from "./lib/local-library";
+import {
+  addToLocalLibrary,
+  findLocalBook,
+  localLibraryByGoogleId,
+} from "./lib/local-library";
 
 type SearchResult = {
   googleBooksId: string;
@@ -34,6 +38,10 @@ export function BookSearch() {
   const [saved, setSaved] = useState<Record<string, Id<"books">>>({});
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    setSaved(localLibraryByGoogleId());
+  }, []);
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const query = title.trim();
@@ -57,7 +65,13 @@ export function BookSearch() {
   }
 
   async function onPick(result: SearchResult) {
-    if (savingId || saved[result.googleBooksId] || !ready) {
+    const existingId =
+      saved[result.googleBooksId] ?? findLocalBook(result.googleBooksId);
+    if (existingId) {
+      router.push(`/books/${existingId}`);
+      return;
+    }
+    if (savingId || !ready || session === null) {
       return;
     }
 
@@ -72,16 +86,16 @@ export function BookSearch() {
         author: result.author,
         genreTags: result.genreTags,
         moodTags: [],
-        sessionId: session?.sessionId ?? undefined,
+        sessionId: session.sessionId ?? undefined,
         coverUrl: result.coverUrl ?? undefined,
         destination: "appleMusic",
       });
       await buildApplePlaylist({
-        sessionId: session?.sessionId ?? undefined,
+        sessionId: session.sessionId ?? undefined,
         bookId,
         musicUserToken: apple.musicUserToken,
       });
-      addToLocalLibrary(bookId);
+      addToLocalLibrary(bookId, result.googleBooksId);
       setSaved((current) => ({ ...current, [result.googleBooksId]: bookId }));
       router.push(`/books/${bookId}`);
     } catch (err) {
@@ -163,13 +177,12 @@ export function BookSearch() {
               <li key={result.googleBooksId}>
                 <button
                   type="button"
-                  onClick={() => onPick(result)}
+                  onClick={() => void onPick(result)}
                   disabled={
                     isSaving ||
-                    isSaved ||
                     savingId !== null ||
-                    !ready ||
-                    configured === false
+                    (!isSaved &&
+                      (session === null || !ready || configured === false))
                   }
                   className="focus-ring flex min-h-24 w-full items-center gap-3 rounded-lg bg-[#242424] p-2.5 text-left transition-colors hover:bg-[#303030] active:bg-[#383838] disabled:opacity-70"
                 >
@@ -187,7 +200,8 @@ export function BookSearch() {
                       ? "Saved"
                       : isSaving
                         ? "Creating playlist…"
-                        : !ready && configured !== false
+                        : session === null ||
+                            (!ready && configured !== false)
                           ? "Loading…"
                           : "Apple Music"}
                   </span>

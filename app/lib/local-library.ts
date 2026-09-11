@@ -3,7 +3,12 @@ import { Id } from "../../convex/_generated/dataModel";
 const KEY = "book-playlist:library";
 const MAX_ITEMS = 50;
 
-export function readLocalLibrary(): Id<"books">[] {
+type LocalEntry = {
+  bookId: Id<"books">;
+  googleBooksId?: string;
+};
+
+function readEntries(): LocalEntry[] {
   if (typeof window === "undefined") {
     return [];
   }
@@ -16,35 +21,78 @@ export function readLocalLibrary(): Id<"books">[] {
     if (!Array.isArray(parsed)) {
       return [];
     }
-    const ids: Id<"books">[] = [];
+    const entries: LocalEntry[] = [];
     for (const value of parsed) {
       if (typeof value === "string" && value.length > 0) {
-        ids.push(value as Id<"books">);
+        entries.push({ bookId: value as Id<"books"> });
+        continue;
+      }
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        "bookId" in value &&
+        typeof value.bookId === "string" &&
+        value.bookId.length > 0
+      ) {
+        const googleBooksId =
+          "googleBooksId" in value && typeof value.googleBooksId === "string"
+            ? value.googleBooksId
+            : undefined;
+        entries.push({
+          bookId: value.bookId as Id<"books">,
+          googleBooksId,
+        });
       }
     }
-    return ids.slice(0, MAX_ITEMS);
+    return entries.slice(0, MAX_ITEMS);
   } catch {
     return [];
   }
 }
 
-export function addToLocalLibrary(bookId: Id<"books">): void {
+function writeEntries(entries: LocalEntry[]): void {
+  window.localStorage.setItem(KEY, JSON.stringify(entries.slice(0, MAX_ITEMS)));
+}
+
+export function readLocalLibrary(): Id<"books">[] {
+  return readEntries().map((entry) => entry.bookId);
+}
+
+export function findLocalBook(googleBooksId: string): Id<"books"> | undefined {
+  return readEntries().find((entry) => entry.googleBooksId === googleBooksId)
+    ?.bookId;
+}
+
+export function localLibraryByGoogleId(): Record<string, Id<"books">> {
+  const byGoogleId: Record<string, Id<"books">> = {};
+  for (const entry of readEntries()) {
+    if (entry.googleBooksId) {
+      byGoogleId[entry.googleBooksId] = entry.bookId;
+    }
+  }
+  return byGoogleId;
+}
+
+export function addToLocalLibrary(
+  bookId: Id<"books">,
+  googleBooksId: string
+): void {
   if (typeof window === "undefined") {
     return;
   }
-  const next = [bookId, ...readLocalLibrary().filter((id) => id !== bookId)].slice(
-    0,
-    MAX_ITEMS
-  );
-  window.localStorage.setItem(KEY, JSON.stringify(next));
+  const next = [
+    { bookId, googleBooksId },
+    ...readEntries().filter(
+      (entry) =>
+        entry.bookId !== bookId && entry.googleBooksId !== googleBooksId
+    ),
+  ];
+  writeEntries(next);
 }
 
 export function removeFromLocalLibrary(bookId: Id<"books">): void {
   if (typeof window === "undefined") {
     return;
   }
-  window.localStorage.setItem(
-    KEY,
-    JSON.stringify(readLocalLibrary().filter((id) => id !== bookId))
-  );
+  writeEntries(readEntries().filter((entry) => entry.bookId !== bookId));
 }
