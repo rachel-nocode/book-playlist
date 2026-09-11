@@ -6,6 +6,8 @@ export type AppleSongCandidate = {
   artistName: string;
   albumName: string;
   url: string;
+  albumImageUrl: string | null;
+  previewUrl: string | null;
 };
 
 const VERSION_PENALTIES = [
@@ -83,4 +85,27 @@ export function pickBestAppleSong(
 export function firstArtistName(artists: string): string {
   const primary = artists.split(",")[0] ?? artists;
   return primary.replace(/\s+\(?feat\.?.*$/i, "").trim();
+}
+
+export function appleSongToTrack(song: AppleSongCandidate): {
+  id: string;
+  name: string;
+  artists: string;
+  album: string;
+  albumImageUrl: string | null;
+  previewUrl: string | null;
+  uri: string;
+  externalUrl: string;
+} {
+  return {
+    id: song.id,
+    name: song.name,
+    artists: song.artistName || "Unknown artist",
+    album: song.albumName || "Unknown album",
+    albumImageUrl: song.albumImageUrl,
+    previewUrl: song.previewUrl,
+    uri: `apple:song:${song.id}`,
+    externalUrl:
+      song.url || `https://music.apple.com/search?term=${encodeURIComponent(song.name)}`,
+  };
 }

@@ -2,6 +2,7 @@ import { BookSearch } from "./book-search";
 import { LocalHostRedirect } from "./local-host-redirect";
 import { SavedPlaylists } from "./saved-playlists";
 import { SpotifyConnect } from "./spotify-connect";
+import { AppleMusicConnect } from "./apple-music-connect";
 
 export default function Home() {
   return (
@@ -30,9 +31,10 @@ export default function Home() {
               Find the sound of your next read.
             </h1>
             <p className="mt-4 max-w-xl text-base text-white/75 sm:text-lg">
-              Search for a book and turn its world, mood, and genre into a playlist.
+              Search for a book and we’ll build an Apple Music playlist from its world, mood, and genre.
             </p>
-            <div className="mt-6">
+            <div className="mt-6 flex flex-col gap-3">
+              <AppleMusicConnect />
               <SpotifyConnect />
             </div>
           </div>
@@ -46,7 +48,7 @@ export default function Home() {
               </p>
               <h2 className="mt-1 text-2xl font-black tracking-tight">Start with a book</h2>
             </div>
-            <span className="hidden text-sm text-white/45 sm:block">We’ll handle the vibe.</span>
+            <span className="hidden text-sm text-white/45 sm:block">We’ll make an Apple Music playlist.</span>
           </div>
           <BookSearch />
         </section>

@@ -1,7 +1,7 @@
 "use node";
 
 import { SignJWT, importPKCS8 } from "jose";
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
@@ -9,9 +9,24 @@ import { Id } from "./_generated/dataModel";
 import {
   firstArtistName,
   pickBestAppleSong,
+  appleSongToTrack,
   type AppleSongCandidate,
 } from "./lib/appleMusicMatch";
 import { appleMusicConfigured } from "./lib/appleMusicConfig";
+import { mapGenreTagsToMoodFilters } from "./lib/genreMoodMap";
+import {
+  buildCatalogQueries,
+  isTrailerText,
+  scorePlaylistMatch,
+  trackVibeScore,
+} from "./lib/trackMatch";
+import {
+  resolveVibeIds,
+  resolveVibeOptions,
+  vibeLabels,
+  type VibeId,
+  type VibeOption,
+} from "./lib/vibes";
 
 const APPLE_API = "https://api.music.apple.com/v1";
 const SPOTIFY_API = "https://api.spotify.com/v1";
@@ -124,9 +139,431 @@ export const createLibraryPlaylist = action({
   },
 });
 
+export const buildSoundtrack = action({
+  args: {
+    sessionId: v.optional(v.id("sessions")),
+    bookId: v.id("books"),
+    musicUserToken: v.string(),
+    developerToken: v.optional(v.string()),
+  },
+  returns: createResult,
+  handler: async (ctx, args) => {
+    if (!appleMusicConfigured()) {
+      throw new Error(
+        "Apple Music is not configured. Set APPLE_MUSIC_TEAM_ID, APPLE_MUSIC_KEY_ID, and APPLE_MUSIC_PRIVATE_KEY."
+      );
+    }
+    if (!args.musicUserToken.trim()) {
+      throw new Error("Connect Apple Music first");
+    }
+
+    const book = await ctx.runQuery(internal.appleMusic.getBookContext, {
+      bookId: args.bookId,
+      sessionId: args.sessionId,
+    });
+    const developerToken =
+      usableDeveloperToken(args.developerToken) ??
+      (await signDeveloperToken());
+    const storefront = await getStorefront(
+      developerToken,
+      args.musicUserToken
+    );
+    const compiled = await compileAppleBookTracks(
+      developerToken,
+      storefront,
+      book
+    );
+    if (compiled.tracks.length === 0) {
+      throw new Error("No matching Apple Music tracks yet. Try a different vibe.");
+    }
+
+    if (compiled.moodTags.length > 0) {
+      await ctx.runMutation(internal.books.persistMoodTags, {
+        bookId: args.bookId,
+        moodTags: compiled.moodTags,
+      });
+    }
+
+    await ctx.runMutation(internal.playlists.overwriteTracks, {
+      bookId: args.bookId,
+      tracks: compiled.tracks,
+      sourceHint: compiled.sourceHint,
+      provider: "appleMusic",
+    });
+
+    const created = await createApplePlaylist(
+      developerToken,
+      args.musicUserToken,
+      {
+        name: playlistName(book.bookTitle),
+        description: `Book Playlist soundtrack for ${book.bookTitle} by ${book.author}`,
+        songs: compiled.songs,
+      }
+    );
+
+    await ctx.runMutation(internal.appleMusic.saveLibraryPlaylist, {
+      bookId: args.bookId,
+      playlistId: created.id,
+      playlistUrl: created.url,
+    });
+
+    return {
+      playlistId: created.id,
+      playlistUrl: created.url,
+      matchedCount: compiled.tracks.length,
+      unmatched: [],
+    };
+  },
+});
+
+export const refreshCatalog = internalAction({
+  args: { bookId: v.id("books") },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
+    if (!appleMusicConfigured()) {
+      return null;
+    }
+    const bookDoc = await ctx.runQuery(internal.books.get, {
+      bookId: args.bookId,
+    });
+    if (!bookDoc) {
+      return null;
+    }
+    const book = {
+      bookTitle: bookDoc.title,
+      author: bookDoc.author,
+      genreTags: bookDoc.genreTags,
+      moodTags: bookDoc.moodTags,
+    };
+    const developerToken = await signDeveloperToken();
+    const storefront = process.env.APPLE_MUSIC_STOREFRONT?.trim() || "us";
+    const compiled = await compileAppleBookTracks(
+      developerToken,
+      storefront,
+      book
+    );
+    if (compiled.tracks.length === 0) {
+      return null;
+    }
+    if (compiled.moodTags.length > 0) {
+      await ctx.runMutation(internal.books.persistMoodTags, {
+        bookId: args.bookId,
+        moodTags: compiled.moodTags,
+      });
+    }
+    await ctx.runMutation(internal.playlists.overwriteTracks, {
+      bookId: args.bookId,
+      tracks: compiled.tracks,
+      sourceHint: compiled.sourceHint,
+      provider: "appleMusic",
+    });
+    return null;
+  },
+});
+
 function playlistName(title: string): string {
   const trimmed = title.trim() || "Book soundtrack";
   return trimmed.length > 80 ? `${trimmed.slice(0, 77)}...` : trimmed;
+}
+
+const TARGET_TRACKS = 10;
+const MAX_PLAYLISTS = 3;
+const TRACKS_PER_PLAYLIST = 30;
+
+type CompiledAppleTrack = ReturnType<typeof appleSongToTrack>;
+
+async function compileAppleBookTracks(
+  developerToken: string,
+  storefront: string,
+  book: {
+    bookTitle: string;
+    author: string;
+    genreTags: string[];
+    moodTags: string[];
+  }
+): Promise<{
+  tracks: CompiledAppleTrack[];
+  songs: AppleSongCandidate[];
+  sourceHint: string;
+  moodTags: VibeId[];
+}> {
+  const filters = mapGenreTagsToMoodFilters(book.genreTags);
+  const vibeIds = resolveVibeIds(book.moodTags, filters.moodTags);
+  const vibes = resolveVibeOptions(vibeIds);
+  const harvested = await harvestApplePlaylists(
+    developerToken,
+    storefront,
+    book.bookTitle,
+    book.author
+  );
+  const catalog = await searchAppleCatalogFill(
+    developerToken,
+    storefront,
+    book,
+    vibes,
+    filters.searchTerms
+  );
+  const ranked = mergeRankedAppleSongs(
+    [
+      { songs: harvested, bonus: 8 },
+      { songs: catalog, bonus: 1 },
+    ],
+    vibes
+  ).slice(0, TARGET_TRACKS);
+
+  const fromPlaylists = harvested.length > 0;
+  return {
+    songs: ranked,
+    tracks: ranked.map(appleSongToTrack),
+    sourceHint: appleSourceHint(book.bookTitle, vibeIds, fromPlaylists),
+    moodTags: vibeIds,
+  };
+}
+
+function appleSourceHint(
+  title: string,
+  vibeIds: VibeId[],
+  fromPlaylists: boolean
+): string {
+  if (fromPlaylists && title.trim()) {
+    return `Apple Music playlists named ${title.trim()}`;
+  }
+  const labels = vibeLabels(vibeIds);
+  if (labels.length > 0) {
+    return `Apple Music ${labels.join(" + ")} search`;
+  }
+  if (title.trim()) {
+    return `Apple Music “${title.trim()}” search`;
+  }
+  return "Apple Music vibe search";
+}
+
+async function harvestApplePlaylists(
+  developerToken: string,
+  storefront: string,
+  title: string,
+  author: string
+): Promise<AppleSongCandidate[]> {
+  const trimmedTitle = title.trim();
+  if (!trimmedTitle) {
+    return [];
+  }
+  const queries = [`${trimmedTitle}`];
+  if (author.trim()) {
+    queries.push(`${trimmedTitle} ${author.trim()}`);
+  }
+
+  const playlists: Array<{
+    id: string;
+    name: string;
+    description: string;
+    score: number;
+  }> = [];
+  for (const query of queries) {
+    const found = await searchApplePlaylists(
+      developerToken,
+      storefront,
+      query,
+      10
+    );
+    for (const playlist of found) {
+      const score = scorePlaylistMatch(
+        playlist.name,
+        playlist.description,
+        trimmedTitle,
+        author
+      );
+      if (score > 0) {
+        playlists.push({ ...playlist, score });
+      }
+    }
+  }
+
+  const top = dedupeById(playlists)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, MAX_PLAYLISTS);
+
+  const songs: AppleSongCandidate[] = [];
+  for (const playlist of top) {
+    songs.push(
+      ...(await getApplePlaylistTracks(
+        developerToken,
+        storefront,
+        playlist.id,
+        TRACKS_PER_PLAYLIST
+      ))
+    );
+  }
+  return songs;
+}
+
+async function searchAppleCatalogFill(
+  developerToken: string,
+  storefront: string,
+  book: { bookTitle: string; author: string },
+  vibes: VibeOption[],
+  genreSearchTerms: string[]
+): Promise<AppleSongCandidate[]> {
+  const queries = buildCatalogQueries({
+    title: book.bookTitle,
+    author: book.author,
+    vibeSearchTerms: vibes.flatMap((vibe) => [...vibe.searchTerms]),
+    genreSearchTerms,
+  });
+  const songs: AppleSongCandidate[] = [];
+  for (const query of queries) {
+    songs.push(
+      ...(await searchSongs(developerToken, storefront, query))
+    );
+  }
+  return songs;
+}
+
+function mergeRankedAppleSongs(
+  groups: Array<{ songs: AppleSongCandidate[]; bonus: number }>,
+  vibes: VibeOption[]
+): AppleSongCandidate[] {
+  const byId = new Map<string, AppleSongCandidate & { score: number }>();
+  for (const group of groups) {
+    for (const song of group.songs) {
+      if (isTrailerText(`${song.name} ${song.artistName} ${song.albumName}`)) {
+        continue;
+      }
+      const add =
+        group.bonus +
+        trackVibeScore(
+          `${song.name} ${song.artistName} ${song.albumName}`,
+          vibes
+        );
+      const existing = byId.get(song.id);
+      if (existing) {
+        existing.score += add;
+      } else {
+        byId.set(song.id, { ...song, score: add });
+      }
+    }
+  }
+  return [...byId.values()]
+    .sort((left, right) => right.score - left.score)
+    .map((ranked) => ({
+      id: ranked.id,
+      name: ranked.name,
+      artistName: ranked.artistName,
+      albumName: ranked.albumName,
+      url: ranked.url,
+      albumImageUrl: ranked.albumImageUrl,
+      previewUrl: ranked.previewUrl,
+    }));
+}
+
+function dedupeById<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const item of items) {
+    if (seen.has(item.id)) {
+      continue;
+    }
+    seen.add(item.id);
+    result.push(item);
+  }
+  return result;
+}
+
+async function searchApplePlaylists(
+  developerToken: string,
+  storefront: string,
+  term: string,
+  limit: number
+): Promise<Array<{ id: string; name: string; description: string }>> {
+  const url = new URL(`${APPLE_API}/catalog/${storefront}/search`);
+  url.searchParams.set("term", term);
+  url.searchParams.set("types", "playlists");
+  url.searchParams.set("limit", String(limit));
+  const response = await appleFetch(url.toString(), developerToken);
+  if (!response.ok) {
+    return [];
+  }
+  const data: unknown = await response.json();
+  return parseSearchPlaylists(data);
+}
+
+async function getApplePlaylistTracks(
+  developerToken: string,
+  storefront: string,
+  playlistId: string,
+  limit: number
+): Promise<AppleSongCandidate[]> {
+  const url = new URL(
+    `${APPLE_API}/catalog/${storefront}/playlists/${playlistId}/tracks`
+  );
+  url.searchParams.set("limit", String(limit));
+  const response = await appleFetch(url.toString(), developerToken);
+  if (!response.ok) {
+    return [];
+  }
+  const data: unknown = await response.json();
+  return parseSongList(data);
+}
+
+function parseSearchPlaylists(
+  data: unknown
+): Array<{ id: string; name: string; description: string }> {
+  if (typeof data !== "object" || data === null || !("results" in data)) {
+    return [];
+  }
+  const results = (data as { results: unknown }).results;
+  if (
+    typeof results !== "object" ||
+    results === null ||
+    !("playlists" in results)
+  ) {
+    return [];
+  }
+  const playlists = (results as { playlists: unknown }).playlists;
+  if (
+    typeof playlists !== "object" ||
+    playlists === null ||
+    !("data" in playlists)
+  ) {
+    return [];
+  }
+  const items = (playlists as { data: unknown }).data;
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  const parsed: Array<{ id: string; name: string; description: string }> = [];
+  for (const item of items) {
+    if (typeof item !== "object" || item === null) {
+      continue;
+    }
+    const record = item as Record<string, unknown>;
+    if (typeof record.id !== "string") {
+      continue;
+    }
+    const attributes =
+      typeof record.attributes === "object" && record.attributes !== null
+        ? (record.attributes as Record<string, unknown>)
+        : null;
+    const name = typeof attributes?.name === "string" ? attributes.name : "";
+    if (!name) {
+      continue;
+    }
+    parsed.push({
+      id: record.id,
+      name,
+      description:
+        typeof attributes?.description === "string"
+          ? attributes.description
+          : typeof attributes?.description === "object" &&
+              attributes.description !== null &&
+              typeof (attributes.description as Record<string, unknown>)
+                .standard === "string"
+            ? ((attributes.description as Record<string, unknown>)
+                .standard as string)
+            : "",
+    });
+  }
+  return parsed;
 }
 
 function sanitizeOrigin(origin: string | undefined): string | undefined {
@@ -567,7 +1004,32 @@ function parseSong(item: unknown): AppleSongCandidate | null {
     albumName:
       typeof attributes?.albumName === "string" ? attributes.albumName : "",
     url: typeof attributes?.url === "string" ? attributes.url : "",
+    albumImageUrl: artworkUrl(attributes?.artwork),
+    previewUrl: previewUrl(attributes?.previews),
   };
+}
+
+function artworkUrl(artwork: unknown): string | null {
+  if (typeof artwork !== "object" || artwork === null) {
+    return null;
+  }
+  const url = (artwork as Record<string, unknown>).url;
+  if (typeof url !== "string" || !url) {
+    return null;
+  }
+  return url.replace("{w}", "300").replace("{h}", "300");
+}
+
+function previewUrl(previews: unknown): string | null {
+  if (!Array.isArray(previews) || previews.length === 0) {
+    return null;
+  }
+  const first = previews[0];
+  if (typeof first !== "object" || first === null) {
+    return null;
+  }
+  const url = (first as Record<string, unknown>).url;
+  return typeof url === "string" && url ? url : null;
 }
 
 function appleError(data: unknown, fallback: string): string {

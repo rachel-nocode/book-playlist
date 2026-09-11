@@ -11,7 +11,7 @@ import { v } from "convex/values";
 import { Id, Doc } from "./_generated/dataModel";
 import { getAddedBy } from "./lib/auth";
 import { sanitizeVibeIds } from "./lib/vibes";
-import { spotifyTrack, vibeId } from "./lib/validators";
+import { spotifyTrack, vibeId, musicProvider } from "./lib/validators";
 
 const bookDoc = v.object({
   _id: v.id("books"),
@@ -25,6 +25,7 @@ const bookDoc = v.object({
   userId: v.optional(v.id("users")),
   coverUrl: v.optional(v.string()),
   createdAt: v.number(),
+  musicProvider: v.optional(musicProvider),
 });
 
 const playlistDoc = v.object({
@@ -40,6 +41,7 @@ const playlistDoc = v.object({
   appleMusicPlaylistId: v.optional(v.string()),
   appleMusicPlaylistUrl: v.optional(v.string()),
   appleMusicCreatedAt: v.optional(v.number()),
+  provider: v.optional(musicProvider),
 });
 
 export const create = mutation({
@@ -51,6 +53,7 @@ export const create = mutation({
     moodTags: v.array(v.string()),
     sessionId: v.optional(v.id("sessions")),
     coverUrl: v.optional(v.string()),
+    destination: v.optional(musicProvider),
   },
   returns: v.id("books"),
   handler: async (ctx, args): Promise<Id<"books">> => {
@@ -74,6 +77,9 @@ export const create = mutation({
     if (existing && args.coverUrl && !existing.coverUrl) {
       await ctx.db.patch(existing._id, { coverUrl: args.coverUrl });
     }
+    if (existing && args.destination && existing.musicProvider !== args.destination) {
+      await ctx.db.patch(existing._id, { musicProvider: args.destination });
+    }
 
     if (!bookId) {
       bookId = await ctx.db.insert("books", {
@@ -86,10 +92,11 @@ export const create = mutation({
         userId,
         coverUrl: args.coverUrl,
         createdAt: Date.now(),
+        musicProvider: args.destination,
       });
     }
 
-    if (userId) {
+    if (userId && args.destination !== "appleMusic") {
       await ctx.scheduler.runAfter(
         0,
         internal.spotifyActions.refreshBookPlaylist,
@@ -245,11 +252,11 @@ export const setMoodTags = mutation({
 
     const moodTags = sanitizeVibeIds(args.moodTags);
     await ctx.db.patch(args.bookId, { moodTags });
-    await ctx.scheduler.runAfter(
-      0,
-      internal.spotifyActions.refreshBookPlaylist,
-      { bookId: args.bookId }
-    );
+    const refreshTarget =
+      book.musicProvider === "appleMusic"
+        ? internal.appleMusicActions.refreshCatalog
+        : internal.spotifyActions.refreshBookPlaylist;
+    await ctx.scheduler.runAfter(0, refreshTarget, { bookId: args.bookId });
     return null;
   },
 });

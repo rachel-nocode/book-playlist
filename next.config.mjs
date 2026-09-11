@@ -30,7 +30,7 @@ const nextConfig = {
       },
       {
         protocol: "https",
-        hostname: "**.spotifycdn.com",
+        hostname: "**.mzstatic.com",
         pathname: "/**",
       },
     ],

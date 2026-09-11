@@ -34,6 +34,9 @@ export default defineSchema({
     userId: v.optional(v.id("users")),
     coverUrl: v.optional(v.string()),
     createdAt: v.number(),
+    musicProvider: v.optional(
+      v.union(v.literal("spotify"), v.literal("appleMusic"))
+    ),
   })
     .index("by_googleBooksId", ["googleBooksId"])
     .index("by_addedBy", ["addedBy"])
@@ -63,5 +66,8 @@ export default defineSchema({
     appleMusicPlaylistId: v.optional(v.string()),
     appleMusicPlaylistUrl: v.optional(v.string()),
     appleMusicCreatedAt: v.optional(v.number()),
+    provider: v.optional(
+      v.union(v.literal("spotify"), v.literal("appleMusic"))
+    ),
   }).index("by_bookId", ["bookId"]),
 });

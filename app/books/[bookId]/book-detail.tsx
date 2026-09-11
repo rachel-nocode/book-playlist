@@ -143,7 +143,6 @@ export function BookDetail({ bookId }: { bookId: Id<"books"> }) {
             <AppleMusicSave
               bookId={bookId}
               sessionId={session.sessionId}
-              trackCount={tracks.length}
               playlistUrl={playlist?.appleMusicPlaylistUrl}
             />
           ) : null}
@@ -191,7 +190,7 @@ export function BookDetail({ bookId }: { bookId: Id<"books"> }) {
       <section className="rounded-xl bg-[#121212] p-4 sm:p-5">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">Generated playlist</p>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">Apple Music playlist</p>
             <h2 className="mt-1 text-2xl font-black">Playlist</h2>
             {playlist?.sourceHint ? (
               <p className="mt-1 text-sm text-white/50">{playlist.sourceHint}</p>

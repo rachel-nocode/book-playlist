@@ -7,6 +7,7 @@ import { useAction, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
 import { useSpotifySession } from "./lib/use-spotify-session";
+import { useAppleMusicAuth } from "./lib/use-apple-music";
 
 type SearchResult = {
   googleBooksId: string;
@@ -19,7 +20,9 @@ type SearchResult = {
 export function BookSearch() {
   const searchByTitle = useAction(api.googleBooks.searchByTitle);
   const createBook = useMutation(api.books.create);
+  const buildApplePlaylist = useAction(api.appleMusicActions.buildSoundtrack);
   const { session } = useSpotifySession();
+  const { connect } = useAppleMusicAuth();
   const router = useRouter();
 
   const [title, setTitle] = useState("");
@@ -61,6 +64,7 @@ export function BookSearch() {
     setError(null);
 
     try {
+      const apple = await connect();
       const bookId = await createBook({
         googleBooksId: result.googleBooksId,
         title: result.title,
@@ -69,6 +73,13 @@ export function BookSearch() {
         moodTags: [],
         sessionId: session?.sessionId ?? undefined,
         coverUrl: result.coverUrl ?? undefined,
+        destination: "appleMusic",
+      });
+      await buildApplePlaylist({
+        sessionId: session?.sessionId ?? undefined,
+        bookId,
+        musicUserToken: apple.musicUserToken,
+        developerToken: apple.developerToken,
       });
       setSaved((current) => ({ ...current, [result.googleBooksId]: bookId }));
       router.push(`/books/${bookId}`);
@@ -95,7 +106,7 @@ export function BookSearch() {
             name="q"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder="Search books, authors, or series"
+            placeholder="Search a book to make an Apple Music playlist"
             autoComplete="off"
             autoCapitalize="words"
             enterKeyHint="search"
@@ -130,6 +141,12 @@ export function BookSearch() {
       ) : null}
 
       {results.length > 0 ? (
+        <p className="text-sm text-white/55">
+          Tap a book to sign in to Apple Music and create a playlist from its vibe.
+        </p>
+      ) : null}
+
+      {results.length > 0 ? (
         <ul className="grid gap-2 sm:grid-cols-2" aria-label="Search results">
           {results.map((result) => {
             const isSaving = savingId === result.googleBooksId;
@@ -152,8 +169,12 @@ export function BookSearch() {
                       {result.author}
                     </span>
                   </span>
-                  <span className="shrink-0 rounded-full bg-white/10 px-2.5 py-1 text-xs font-bold text-white/75">
-                    {isSaved ? "Saved" : isSaving ? "Saving…" : "Add"}
+                  <span className="shrink-0 rounded-full bg-[#fa243c] px-2.5 py-1 text-xs font-bold text-white">
+                    {isSaved
+                      ? "Saved"
+                      : isSaving
+                        ? "Creating playlist…"
+                        : "Apple Music"}
                   </span>
                 </button>
               </li>

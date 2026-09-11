@@ -9,19 +9,15 @@ import { authorizeAppleMusic } from "./lib/musickit";
 export function AppleMusicSave({
   bookId,
   sessionId,
-  trackCount,
   playlistUrl,
 }: {
   bookId: Id<"books">;
   sessionId: Id<"sessions">;
-  trackCount: number;
   playlistUrl: string | undefined;
 }) {
   const configured = useQuery(api.appleMusic.isConfigured);
   const getDeveloperToken = useAction(api.appleMusicActions.getDeveloperToken);
-  const createPlaylist = useAction(
-    api.appleMusicActions.createLibraryPlaylist
-  );
+  const createPlaylist = useAction(api.appleMusicActions.buildSoundtrack);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +27,7 @@ export function AppleMusicSave({
   );
 
   const latestUrl = createdUrl ?? playlistUrl;
-  const disabled = saving || trackCount === 0 || configured === false;
+  const disabled = saving || configured === false;
 
   async function onSave() {
     if (disabled) {
@@ -76,10 +72,10 @@ export function AppleMusicSave({
           className="apple-music-button"
         >
           {saving
-            ? "Saving to Apple Music…"
+            ? "Creating Apple Music playlist…"
             : latestUrl
               ? "Save a new Apple Music playlist"
-              : "Save to Apple Music"}
+              : "Create Apple Music playlist"}
         </button>
         {latestUrl ? (
           <a
@@ -95,11 +91,6 @@ export function AppleMusicSave({
       {configured === false ? (
         <p className="text-xs text-white/45">
           Apple Music keys are not set yet, so this stays disabled.
-        </p>
-      ) : null}
-      {trackCount === 0 ? (
-        <p className="text-xs text-white/45">
-          Generate tracks first, then save them to Apple Music.
         </p>
       ) : null}
       {error ? (

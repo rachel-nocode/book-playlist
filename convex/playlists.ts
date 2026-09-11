@@ -2,7 +2,7 @@ import { internalMutation, mutation, MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
-import { spotifyTrack } from "./lib/validators";
+import { spotifyTrack, musicProvider } from "./lib/validators";
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -11,6 +11,7 @@ export const overwriteTracks = internalMutation({
     bookId: v.id("books"),
     tracks: v.array(spotifyTrack),
     sourceHint: v.optional(v.string()),
+    provider: v.optional(musicProvider),
   },
   returns: v.id("playlists"),
   handler: async (ctx, args) => {
@@ -28,6 +29,7 @@ export const overwriteTracks = internalMutation({
         tracks: args.tracks,
         refreshedAt,
         sourceHint: args.sourceHint,
+        ...(args.provider ? { provider: args.provider } : {}),
       });
       return existing._id;
     }
@@ -40,6 +42,7 @@ export const overwriteTracks = internalMutation({
       generatedAt: refreshedAt,
       refreshedAt,
       sourceHint: args.sourceHint,
+      provider: args.provider,
     });
   },
 });
@@ -78,11 +81,11 @@ export const requestRefresh = mutation({
     }
 
     await ctx.db.patch(user._id, { lastManualRefreshAt: now });
-    await ctx.scheduler.runAfter(
-      0,
-      internal.spotifyActions.refreshBookPlaylist,
-      { bookId: args.bookId }
-    );
+    const refreshTarget =
+      book.musicProvider === "appleMusic"
+        ? internal.appleMusicActions.refreshCatalog
+        : internal.spotifyActions.refreshBookPlaylist;
+    await ctx.scheduler.runAfter(0, refreshTarget, { bookId: args.bookId });
     return null;
   },
 });
