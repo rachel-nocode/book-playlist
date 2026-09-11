@@ -1,6 +1,7 @@
 import { Id } from "../../convex/_generated/dataModel";
 
 const KEY = "book-playlist:library";
+const CHANGE_EVENT = "book-playlist:library-changed";
 const MAX_ITEMS = 50;
 
 type LocalEntry = {
@@ -52,6 +53,20 @@ function readEntries(): LocalEntry[] {
 
 function writeEntries(entries: LocalEntry[]): void {
   window.localStorage.setItem(KEY, JSON.stringify(entries.slice(0, MAX_ITEMS)));
+  window.dispatchEvent(new Event(CHANGE_EVENT));
+}
+
+export function subscribeLocalLibrary(listener: () => void): () => void {
+  if (typeof window === "undefined") {
+    return () => undefined;
+  }
+  const onChange = () => listener();
+  window.addEventListener(CHANGE_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(CHANGE_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
 }
 
 export function readLocalLibrary(): Id<"books">[] {

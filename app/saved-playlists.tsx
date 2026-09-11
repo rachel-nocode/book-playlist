@@ -10,6 +10,7 @@ import { useSpotifySession } from "./lib/use-spotify-session";
 import {
   readLocalLibrary,
   removeFromLocalLibrary,
+  subscribeLocalLibrary,
 } from "./lib/local-library";
 
 type LibraryRow = {
@@ -33,7 +34,9 @@ export function SavedPlaylists() {
   const [localIds, setLocalIds] = useState<Id<"books">[]>([]);
 
   useEffect(() => {
-    setLocalIds(readLocalLibrary());
+    const sync = () => setLocalIds(readLocalLibrary());
+    sync();
+    return subscribeLocalLibrary(sync);
   }, []);
 
   const sessionRows = useQuery(

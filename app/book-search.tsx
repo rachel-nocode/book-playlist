@@ -12,6 +12,7 @@ import {
   addToLocalLibrary,
   findLocalBook,
   localLibraryByGoogleId,
+  subscribeLocalLibrary,
 } from "./lib/local-library";
 
 type SearchResult = {
@@ -39,7 +40,9 @@ export function BookSearch() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setSaved(localLibraryByGoogleId());
+    const sync = () => setSaved(localLibraryByGoogleId());
+    sync();
+    return subscribeLocalLibrary(sync);
   }, []);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -65,8 +68,7 @@ export function BookSearch() {
   }
 
   async function onPick(result: SearchResult) {
-    const existingId =
-      saved[result.googleBooksId] ?? findLocalBook(result.googleBooksId);
+    const existingId = findLocalBook(result.googleBooksId);
     if (existingId) {
       router.push(`/books/${existingId}`);
       return;
