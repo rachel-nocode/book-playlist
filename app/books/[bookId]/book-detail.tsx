@@ -8,6 +8,7 @@ import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 import { useSpotifySession } from "../../lib/use-spotify-session";
 import { generatedAgoLabel, HOUR_MS } from "../../lib/time";
+import { AppleMusicSave } from "../../apple-music-save";
 import { mapGenreTagsToMoodFilters } from "../../../convex/lib/genreMoodMap";
 import {
   inferVibeIds,
@@ -125,18 +126,28 @@ export function BookDetail({ bookId }: { bookId: Id<"books"> }) {
       </div>
 
       {isOwner ? (
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={!canRefresh || refreshing}
-          className="spotify-button w-fit"
-        >
-          {refreshing
-            ? "Refreshing…"
-            : canRefresh
-              ? "Refresh now"
-              : "Refresh available in 1 hour"}
-        </button>
+        <div className="flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={!canRefresh || refreshing}
+            className="spotify-button w-fit"
+          >
+            {refreshing
+              ? "Refreshing…"
+              : canRefresh
+                ? "Refresh now"
+                : "Refresh available in 1 hour"}
+          </button>
+          {session?.sessionId ? (
+            <AppleMusicSave
+              bookId={bookId}
+              sessionId={session.sessionId}
+              trackCount={tracks.length}
+              playlistUrl={playlist?.appleMusicPlaylistUrl}
+            />
+          ) : null}
+        </div>
       ) : null}
 
       {error ? (

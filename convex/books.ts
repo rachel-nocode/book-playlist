@@ -37,6 +37,9 @@ const playlistDoc = v.object({
   generatedAt: v.number(),
   refreshedAt: v.number(),
   sourceHint: v.optional(v.string()),
+  appleMusicPlaylistId: v.optional(v.string()),
+  appleMusicPlaylistUrl: v.optional(v.string()),
+  appleMusicCreatedAt: v.optional(v.number()),
 });
 
 export const create = mutation({

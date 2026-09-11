@@ -74,6 +74,7 @@ export function SavedPlaylists() {
                   <span className="mt-2 block text-xs font-semibold text-[#b9f5cd]">
                     {playlist.trackIds.length} tracks · updated{" "}
                     {new Date(playlist.refreshedAt).toLocaleDateString()}
+                    {playlist.appleMusicPlaylistUrl ? " · Apple Music" : ""}
                   </span>
                 ) : (
                   <span className="mt-2 block text-xs font-semibold text-white/45">
