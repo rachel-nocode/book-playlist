@@ -62,6 +62,10 @@ export function BookDetail({ bookId }: { bookId: Id<"books"> }) {
     isOwner &&
     Boolean(session?.sessionId) &&
     (lastManualRefreshAt === null || now - lastManualRefreshAt >= HOUR_MS);
+  const showOwnerControls = isOwner && Boolean(session?.sessionId);
+  const canCreateApplePlaylist = isOwner || !book.userId;
+  const showAppleMusic =
+    canCreateApplePlaylist || Boolean(playlist?.appleMusicPlaylistUrl);
 
   async function onToggleVibe(vibeId: VibeId) {
     if (!session?.sessionId || !isOwner || updatingVibe) {
@@ -125,26 +129,28 @@ export function BookDetail({ bookId }: { bookId: Id<"books"> }) {
       </div>
       </div>
 
-      {isOwner ? (
+      {showOwnerControls || showAppleMusic ? (
         <div className="flex flex-col gap-3">
-          <button
-            type="button"
-            onClick={onRefresh}
-            disabled={!canRefresh || refreshing}
-            className="spotify-button w-fit"
-          >
-            {refreshing
-              ? "Refreshing…"
-              : canRefresh
-                ? "Refresh now"
-                : "Refresh available in 1 hour"}
-          </button>
-          {session?.sessionId ? (
+          {showOwnerControls ? (
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={!canRefresh || refreshing}
+              className="spotify-button w-fit"
+            >
+              {refreshing
+                ? "Refreshing…"
+                : canRefresh
+                  ? "Refresh now"
+                  : "Refresh available in 1 hour"}
+            </button>
+          ) : null}
+          {showAppleMusic ? (
             <AppleMusicSave
               bookId={bookId}
-              sessionId={session.sessionId}
-              trackCount={tracks.length}
+              sessionId={session?.sessionId ?? undefined}
               playlistUrl={playlist?.appleMusicPlaylistUrl}
+              allowCreate={canCreateApplePlaylist}
             />
           ) : null}
         </div>
@@ -191,7 +197,7 @@ export function BookDetail({ bookId }: { bookId: Id<"books"> }) {
       <section className="rounded-xl bg-[#121212] p-4 sm:p-5">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">Generated playlist</p>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">Apple Music playlist</p>
             <h2 className="mt-1 text-2xl font-black">Playlist</h2>
             {playlist?.sourceHint ? (
               <p className="mt-1 text-sm text-white/50">{playlist.sourceHint}</p>

@@ -118,6 +118,9 @@ export const refreshBookPlaylist = internalAction({
     if (!book?.userId) {
       return null;
     }
+    if (book.musicProvider === "appleMusic") {
+      return null;
+    }
 
     await refreshBook(ctx, book);
     return null;
@@ -133,6 +136,10 @@ export const refreshUserPlaylists = internalAction({
     });
 
     for (const book of books) {
+      // Apple Music books are refreshed by kickoffDailyRefresh → refreshCatalog.
+      if (book.musicProvider === "appleMusic") {
+        continue;
+      }
       try {
         await refreshBook(ctx, book);
       } catch (error) {

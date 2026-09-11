@@ -29,6 +29,11 @@ export const moodFilters = v.object({
   }),
 });
 
+export const musicProvider = v.union(
+  v.literal("spotify"),
+  v.literal("appleMusic")
+);
+
 export const spotifyTrack = v.object({
   id: v.string(),
   name: v.string(),

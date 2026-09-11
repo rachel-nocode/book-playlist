@@ -11,6 +11,40 @@ export const isConfigured = query({
   },
 });
 
+export const getBookContext = internalQuery({
+  args: {
+    bookId: v.id("books"),
+    sessionId: v.optional(v.id("sessions")),
+  },
+  returns: v.object({
+    bookTitle: v.string(),
+    author: v.string(),
+    genreTags: v.array(v.string()),
+    moodTags: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const book = await ctx.db.get(args.bookId);
+    if (!book) {
+      throw new Error("Book not found");
+    }
+    if (book.userId) {
+      if (!args.sessionId) {
+        throw new Error("Not connected");
+      }
+      const session = await ctx.db.get(args.sessionId);
+      if (!session || session.userId !== book.userId) {
+        throw new Error("Unauthorized");
+      }
+    }
+    return {
+      bookTitle: book.title,
+      author: book.author,
+      genreTags: book.genreTags,
+      moodTags: book.moodTags,
+    };
+  },
+});
+
 export const getExportContext = internalQuery({
   args: {
     sessionId: v.id("sessions"),
@@ -74,6 +108,11 @@ export const saveLibraryPlaylist = internalMutation({
       appleMusicPlaylistUrl: args.playlistUrl,
       appleMusicCreatedAt: Date.now(),
     });
+
+    const book = await ctx.db.get(args.bookId);
+    if (book && book.musicProvider !== "appleMusic") {
+      await ctx.db.patch(args.bookId, { musicProvider: "appleMusic" });
+    }
     return null;
   },
 });

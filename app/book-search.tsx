@@ -1,12 +1,19 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAction, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
 import { useSpotifySession } from "./lib/use-spotify-session";
+import { useAppleMusicAuth } from "./lib/use-apple-music";
+import {
+  addToLocalLibrary,
+  findLocalBook,
+  localLibraryByGoogleId,
+  subscribeLocalLibrary,
+} from "./lib/local-library";
 
 type SearchResult = {
   googleBooksId: string;
@@ -19,7 +26,9 @@ type SearchResult = {
 export function BookSearch() {
   const searchByTitle = useAction(api.googleBooks.searchByTitle);
   const createBook = useMutation(api.books.create);
+  const buildApplePlaylist = useAction(api.appleMusicActions.buildSoundtrack);
   const { session } = useSpotifySession();
+  const { configured, ready, prefetchError, connect } = useAppleMusicAuth();
   const router = useRouter();
 
   const [title, setTitle] = useState("");
@@ -29,6 +38,12 @@ export function BookSearch() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [saved, setSaved] = useState<Record<string, Id<"books">>>({});
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const sync = () => setSaved(localLibraryByGoogleId());
+    sync();
+    return subscribeLocalLibrary(sync);
+  }, []);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -53,7 +68,12 @@ export function BookSearch() {
   }
 
   async function onPick(result: SearchResult) {
-    if (savingId || saved[result.googleBooksId]) {
+    const existingId = findLocalBook(result.googleBooksId);
+    if (existingId) {
+      router.push(`/books/${existingId}`);
+      return;
+    }
+    if (savingId || !ready || session === null) {
       return;
     }
 
@@ -61,15 +81,23 @@ export function BookSearch() {
     setError(null);
 
     try {
+      const apple = await connect();
       const bookId = await createBook({
         googleBooksId: result.googleBooksId,
         title: result.title,
         author: result.author,
         genreTags: result.genreTags,
         moodTags: [],
-        sessionId: session?.sessionId ?? undefined,
+        sessionId: session.sessionId ?? undefined,
         coverUrl: result.coverUrl ?? undefined,
+        destination: "appleMusic",
       });
+      await buildApplePlaylist({
+        sessionId: session.sessionId ?? undefined,
+        bookId,
+        musicUserToken: apple.musicUserToken,
+      });
+      addToLocalLibrary(bookId, result.googleBooksId);
       setSaved((current) => ({ ...current, [result.googleBooksId]: bookId }));
       router.push(`/books/${bookId}`);
     } catch (err) {
@@ -95,7 +123,7 @@ export function BookSearch() {
             name="q"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder="Search books, authors, or series"
+            placeholder="Search a book to make an Apple Music playlist"
             autoComplete="off"
             autoCapitalize="words"
             enterKeyHint="search"
@@ -110,6 +138,12 @@ export function BookSearch() {
           {searching ? "Searching…" : "Search"}
         </button>
       </form>
+
+      {prefetchError ? (
+        <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm font-medium text-red-200" role="alert">
+          {prefetchError}
+        </p>
+      ) : null}
 
       {error ? (
         <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm font-medium text-red-200" role="alert">
@@ -130,6 +164,12 @@ export function BookSearch() {
       ) : null}
 
       {results.length > 0 ? (
+        <p className="text-sm text-white/55">
+          Tap a book to sign in to Apple Music and create a playlist from its vibe.
+        </p>
+      ) : null}
+
+      {results.length > 0 ? (
         <ul className="grid gap-2 sm:grid-cols-2" aria-label="Search results">
           {results.map((result) => {
             const isSaving = savingId === result.googleBooksId;
@@ -139,8 +179,13 @@ export function BookSearch() {
               <li key={result.googleBooksId}>
                 <button
                   type="button"
-                  onClick={() => onPick(result)}
-                  disabled={isSaving || isSaved || savingId !== null}
+                  onClick={() => void onPick(result)}
+                  disabled={
+                    isSaving ||
+                    savingId !== null ||
+                    (!isSaved &&
+                      (session === null || !ready || configured === false))
+                  }
                   className="focus-ring flex min-h-24 w-full items-center gap-3 rounded-lg bg-[#242424] p-2.5 text-left transition-colors hover:bg-[#303030] active:bg-[#383838] disabled:opacity-70"
                 >
                   <Cover title={result.title} url={result.coverUrl} />
@@ -152,8 +197,15 @@ export function BookSearch() {
                       {result.author}
                     </span>
                   </span>
-                  <span className="shrink-0 rounded-full bg-white/10 px-2.5 py-1 text-xs font-bold text-white/75">
-                    {isSaved ? "Saved" : isSaving ? "Saving…" : "Add"}
+                  <span className="shrink-0 rounded-full bg-[#fa243c] px-2.5 py-1 text-xs font-bold text-white">
+                    {isSaved
+                      ? "Saved"
+                      : isSaving
+                        ? "Creating playlist…"
+                        : session === null ||
+                            (!ready && configured !== false)
+                          ? "Loading…"
+                          : "Apple Music"}
                   </span>
                 </button>
               </li>
