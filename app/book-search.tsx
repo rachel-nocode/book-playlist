@@ -120,7 +120,7 @@ export function BookSearch() {
             name="q"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder="Title, author, or that one with the lighthouse"
+            placeholder="Search by title"
             autoComplete="off"
             autoCapitalize="words"
             enterKeyHint="search"
