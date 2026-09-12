@@ -20,14 +20,27 @@ export function SpotifyConnect({ compact = false }: { compact?: boolean }) {
 
   if (session.connected) {
     return (
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <p className="text-xs text-ink sm:text-sm">
-          {session.displayName}
-        </p>
+      <div className="flex min-w-0 items-center justify-end gap-2">
+        {session.displayName ? (
+          <p
+            className={
+              compact
+                ? "hidden max-w-[9rem] truncate text-xs text-ink md:block"
+                : "max-w-[12rem] truncate text-xs text-ink sm:text-sm"
+            }
+          >
+            {session.displayName}
+          </p>
+        ) : null}
         <button
           type="button"
           onClick={logout}
           className="ghost-button min-h-9 px-3 text-xs"
+          aria-label={
+            session.displayName
+              ? `Disconnect ${session.displayName}`
+              : "Disconnect Spotify"
+          }
         >
           Disconnect
         </button>
