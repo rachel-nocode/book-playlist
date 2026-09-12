@@ -2,7 +2,7 @@
 
 import { useSpotifySession } from "./lib/use-spotify-session";
 
-export function SpotifyConnect() {
+export function SpotifyConnect({ compact = false }: { compact?: boolean }) {
   const { session, setSession } = useSpotifySession();
 
   async function logout() {
@@ -12,23 +12,35 @@ export function SpotifyConnect() {
 
   if (!session) {
     return (
-      <p className="inline-flex min-h-11 items-center gap-2 rounded-full bg-black/20 px-4 text-sm font-semibold text-white/70" role="status">
-        <span className="size-2 animate-pulse rounded-full bg-[#1ed760]" /> Checking Spotify…
+      <p className="text-xs text-ink" role="status">
+        Checking Spotify…
       </p>
     );
   }
 
   if (session.connected) {
     return (
-      <div className="flex flex-wrap items-center gap-3">
-        <p className="inline-flex min-h-11 items-center gap-2 rounded-full bg-black/25 px-4 text-sm font-bold">
-          <span className="size-2 rounded-full bg-[#1ed760]" />
-          Connected as {session.displayName}
-        </p>
+      <div className="flex min-w-0 items-center justify-end gap-2">
+        {session.displayName ? (
+          <p
+            className={
+              compact
+                ? "hidden max-w-[9rem] truncate text-xs text-ink md:block"
+                : "max-w-[12rem] truncate text-xs text-ink sm:text-sm"
+            }
+          >
+            {session.displayName}
+          </p>
+        ) : null}
         <button
           type="button"
           onClick={logout}
-          className="spotify-ghost-button shrink-0"
+          className="ghost-button min-h-9 px-3 text-xs"
+          aria-label={
+            session.displayName
+              ? `Disconnect ${session.displayName}`
+              : "Disconnect Spotify"
+          }
         >
           Disconnect
         </button>
@@ -39,9 +51,9 @@ export function SpotifyConnect() {
   return (
     <a
       href="/api/spotify/login"
-      className="spotify-button"
+      className={compact ? "ghost-button min-h-9 px-3 text-xs" : "gold-button"}
     >
-      Connect Spotify
+      {compact ? "Spotify" : "Connect Spotify"}
     </a>
   );
 }

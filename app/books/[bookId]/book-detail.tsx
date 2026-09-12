@@ -32,7 +32,7 @@ export function BookDetail({ bookId }: { bookId: Id<"books"> }) {
 
   if (detail === undefined) {
     return (
-      <p className="text-base text-foreground/70" role="status">
+      <p className="text-base text-ink" role="status">
         Loading…
       </p>
     );
@@ -40,7 +40,7 @@ export function BookDetail({ bookId }: { bookId: Id<"books"> }) {
 
   if (detail === null) {
     return (
-      <p className="text-base text-foreground/70" role="status">
+      <p className="text-base text-ink" role="status">
         Book not found.
       </p>
     );
@@ -103,70 +103,75 @@ export function BookDetail({ bookId }: { bookId: Id<"books"> }) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <Link href="/" className="focus-ring inline-flex w-fit min-h-10 items-center rounded-full px-3 text-sm font-bold text-white/65 transition-colors hover:bg-white/10 hover:text-white">
-        ← Back to library
+    <div className="flex flex-col gap-10">
+      <Link
+        href="/"
+        className="focus-ring w-fit text-sm text-ink transition-colors hover:text-gold"
+      >
+        ← My books
       </Link>
 
-      <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#586e65] via-[#283a34] to-[#181818] p-5 sm:p-7">
-        <div className="absolute -right-12 -top-20 size-52 rounded-full bg-[#1ed760]/15 blur-3xl" />
-        <div className="relative flex gap-4 sm:gap-6">
+      <div className="flex flex-col gap-6 sm:flex-row sm:gap-10">
         <Cover title={book.title} url={book.coverUrl ?? null} />
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b9f5cd]">Book soundtrack</p>
-          <h1 className="mt-2 text-balance text-3xl font-black tracking-tight sm:text-4xl">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gold">
+            Soundtrack
+          </p>
+          <h1 className="mt-2 font-serif text-4xl leading-tight tracking-tight sm:text-5xl">
             {book.title}
           </h1>
-          <p className="mt-2 text-base text-white/70">{book.author}</p>
+          <p className="mt-3 text-lg text-ink">{book.author}</p>
           {generatedAt ? (
-            <p className="mt-4 text-sm font-medium text-white/65">
+            <p className="mt-4 text-sm text-ink">
               {generatedAgoLabel(generatedAt, now)}
             </p>
           ) : (
-            <p className="mt-4 text-sm font-medium text-white/65">Building your soundtrack…</p>
+            <p className="mt-4 text-sm text-ink">Scoring the soundtrack…</p>
           )}
-        </div>
-      </div>
-      </div>
 
-      {showOwnerControls || showAppleMusic ? (
-        <div className="flex flex-col gap-3">
-          {showOwnerControls ? (
-            <button
-              type="button"
-              onClick={onRefresh}
-              disabled={!canRefresh || refreshing}
-              className="spotify-button w-fit"
-            >
-              {refreshing
-                ? "Refreshing…"
-                : canRefresh
-                  ? "Refresh now"
-                  : "Refresh available in 1 hour"}
-            </button>
-          ) : null}
-          {showAppleMusic ? (
-            <AppleMusicSave
-              bookId={bookId}
-              sessionId={session?.sessionId ?? undefined}
-              playlistUrl={playlist?.appleMusicPlaylistUrl}
-              allowCreate={canCreateApplePlaylist}
-            />
+          {showOwnerControls || showAppleMusic ? (
+            <div className="mt-6 flex flex-col gap-3">
+              {showOwnerControls ? (
+                <button
+                  type="button"
+                  onClick={onRefresh}
+                  disabled={!canRefresh || refreshing}
+                  className="gold-button w-fit"
+                >
+                  {refreshing
+                    ? "Refreshing…"
+                    : canRefresh
+                      ? "Refresh soundtrack"
+                      : "Refresh available in 1 hour"}
+                </button>
+              ) : null}
+              {showAppleMusic ? (
+                <AppleMusicSave
+                  bookId={bookId}
+                  sessionId={session?.sessionId ?? undefined}
+                  playlistUrl={playlist?.appleMusicPlaylistUrl}
+                  allowCreate={canCreateApplePlaylist}
+                />
+              ) : null}
+            </div>
           ) : null}
         </div>
-      ) : null}
+      </div>
 
       {error ? (
-        <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm font-medium text-red-200" role="alert">
+        <p className="rounded-sm border border-[#7a2e2e]/50 bg-[#7a2e2e]/15 px-3 py-2 text-sm text-[#e7b4a8]" role="alert">
           {error}
         </p>
       ) : null}
 
       <section aria-label="Playlist vibe">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">
-          Vibe
+        <h2 className="font-serif text-xl">Vibe</h2>
+        <p className="mt-1 text-sm text-ink">
+          {isOwner
+            ? "Pick up to two. Changing vibe rebuilds the soundtrack."
+            : "The mood this playlist is chasing."}
         </p>
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           {VIBE_OPTIONS.map((option) => {
             const selected = selectedVibes.includes(option.id);
             return (
@@ -176,10 +181,10 @@ export function BookDetail({ bookId }: { bookId: Id<"books"> }) {
                 aria-pressed={selected}
                 disabled={!isOwner || updatingVibe || !session?.sessionId}
                 onClick={() => onToggleVibe(option.id)}
-                className={`focus-ring min-h-9 rounded-full px-3.5 text-sm font-bold transition-colors ${
+                className={`focus-ring min-h-9 rounded-sm border px-3 text-sm transition-colors ${
                   selected
-                    ? "bg-[#1ed760] text-black"
-                    : "bg-white/10 text-white/80 hover:bg-white/15"
+                    ? "border-gold bg-gold text-[#1a140e]"
+                    : "border-rule text-foreground/85 hover:border-gold/50"
                 } disabled:cursor-not-allowed disabled:opacity-50`}
               >
                 {option.label}
@@ -187,51 +192,50 @@ export function BookDetail({ bookId }: { bookId: Id<"books"> }) {
             );
           })}
         </div>
-        {isOwner ? (
-          <p className="mt-2 text-xs text-white/45">
-            Pick up to two. Changing vibe rebuilds the soundtrack.
-          </p>
-        ) : null}
       </section>
 
-      <section className="rounded-xl bg-[#121212] p-4 sm:p-5">
-        <div className="flex items-end justify-between gap-3">
+      <section>
+        <div className="flex items-end justify-between gap-3 border-b border-rule/80 pb-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">Apple Music playlist</p>
-            <h2 className="mt-1 text-2xl font-black">Playlist</h2>
+            <h2 className="font-serif text-2xl">The playlist</h2>
             {playlist?.sourceHint ? (
-              <p className="mt-1 text-sm text-white/50">{playlist.sourceHint}</p>
+              <p className="mt-1 text-sm text-ink">{playlist.sourceHint}</p>
             ) : null}
           </div>
-          {tracks.length > 0 ? <span className="text-sm font-semibold text-[#b9f5cd]">{tracks.length} tracks</span> : null}
+          {tracks.length > 0 ? (
+            <span className="text-xs uppercase tracking-[0.16em] text-ink">
+              {tracks.length} tracks
+            </span>
+          ) : null}
         </div>
         {updatingVibe ? (
-          <p className="mt-4 text-sm font-medium text-white/55" role="status">
-            Updating soundtrack…
+          <p className="mt-4 text-sm text-ink" role="status">
+            Rebuilding from the new vibe…
           </p>
         ) : null}
         {tracks.length === 0 ? (
-          <p className="mt-4 rounded-lg bg-white/5 px-4 py-5 text-sm text-white/60">
+          <p className="mt-6 text-sm text-ink">
             {playlist
-              ? "No matching playlists yet. Try a different vibe."
+              ? "No matching tracks yet. Try a different vibe."
               : "Building a soundtrack from this book’s world…"}
           </p>
         ) : (
-          <ol className="mt-4 flex flex-col gap-1">
+          <ol className="mt-2 divide-y divide-rule/70">
             {tracks.map((track, index) => (
               <li key={track.id}>
                 <a
                   href={track.externalUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="focus-ring group flex min-h-14 items-center gap-3 rounded-md p-2 transition-colors hover:bg-white/10 active:bg-white/15"
+                  className="focus-ring group flex min-h-14 items-center gap-3 py-3 transition-colors hover:bg-[#1d1813]"
                 >
                   <TrackArt name={track.name} url={track.albumImageUrl} />
+                  <span className="w-6 shrink-0 text-sm text-ink">{index + 1}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-base font-bold">
-                      <span className="mr-2 inline-block w-5 text-sm font-medium text-white/40">{index + 1}</span>{track.name}
+                    <span className="block truncate font-medium">
+                      {track.name}
                     </span>
-                    <span className="block truncate pl-7 text-sm text-white/55">
+                    <span className="block truncate text-sm text-ink">
                       {track.artists}
                     </span>
                   </span>
@@ -260,7 +264,7 @@ function Cover({ title, url }: { title: string; url: string | null }) {
   if (!url) {
     return (
       <span
-        className="flex h-36 w-24 shrink-0 items-center justify-center rounded bg-foreground/10 text-2xl font-medium text-foreground/50"
+        className="cover-shadow flex h-52 w-36 shrink-0 items-center justify-center bg-[#261f18] font-serif text-4xl text-gold sm:h-64 sm:w-44"
         aria-hidden
       >
         {title.charAt(0)}
@@ -272,9 +276,9 @@ function Cover({ title, url }: { title: string; url: string | null }) {
     <Image
       src={url}
       alt=""
-      width={96}
-      height={144}
-      className="h-36 w-24 shrink-0 rounded object-cover"
+      width={176}
+      height={256}
+      className="cover-shadow h-52 w-36 shrink-0 object-cover sm:h-64 sm:w-44"
       priority
     />
   );
@@ -284,7 +288,7 @@ function TrackArt({ name, url }: { name: string; url: string | null }) {
   if (!url) {
     return (
       <span
-        className="flex size-12 shrink-0 items-center justify-center rounded bg-foreground/10 text-sm text-foreground/50"
+        className="flex size-11 shrink-0 items-center justify-center bg-[#261f18] text-sm text-gold"
         aria-hidden
       >
         {name.charAt(0)}
@@ -296,9 +300,9 @@ function TrackArt({ name, url }: { name: string; url: string | null }) {
     <Image
       src={url}
       alt=""
-      width={48}
-      height={48}
-      className="size-12 shrink-0 rounded object-cover"
+      width={44}
+      height={44}
+      className="size-11 shrink-0 object-cover"
     />
   );
 }

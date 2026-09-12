@@ -77,32 +77,32 @@ export function AppleMusicSave({
             href={latestUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="spotify-ghost-button"
+            className="ghost-button"
           >
             Open in Apple Music
           </a>
         ) : null}
       </div>
       {allowCreate && configured === false ? (
-        <p className="text-xs text-white/45">
+        <p className="text-xs text-ink">
           Apple Music keys are not set yet, so this stays disabled.
         </p>
       ) : null}
       {allowCreate && prefetchError ? (
-        <p className="text-xs text-red-200" role="alert">
+        <p className="text-xs text-[#e7b4a8]" role="alert">
           {prefetchError}
         </p>
       ) : null}
       {error ? (
         <p
-          className="rounded-lg bg-red-500/15 px-3 py-2 text-sm font-medium text-red-200"
+          className="rounded-sm border border-[#7a2e2e]/50 bg-[#7a2e2e]/15 px-3 py-2 text-sm text-[#e7b4a8]"
           role="alert"
         >
           {error}
         </p>
       ) : null}
       {unmatched.length > 0 ? (
-        <p className="text-xs text-white/50">
+        <p className="text-xs text-ink">
           Skipped {unmatched.length} unmatched{" "}
           {unmatched.length === 1 ? "track" : "tracks"}: {unmatched.join("; ")}
         </p>
